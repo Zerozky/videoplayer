@@ -27,9 +27,19 @@ qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
-INCLUDEPATH += D:\ffmpeg\ffmpeg-7.1-full_build-shared\include
-INCLUDEPATH += D:\SDL\SDL2\SDL2-2.32.0\x86_64-w64-mingw32\include
+win32 {
+    INCLUDEPATH += D:\ffmpeg\ffmpeg-7.1-full_build-shared\include
+    INCLUDEPATH += D:\SDL\SDL2\SDL2-2.32.0\x86_64-w64-mingw32\include
 
-LIBS += -LD:\ffmpeg\ffmpeg-7.1-full_build-shared\lib -lswresample -lavformat -lswscale -lavutil  -lavcodec  -lavdevice -lavfilter
-LIBS += -LD:\SDL\SDL2\SDL2-2.32.0\x86_64-w64-mingw32\lib -lSDL2 -lSDL2main
-LIBS += -lpthread
+    LIBS += -LD:\ffmpeg\ffmpeg-7.1-full_build-shared\lib -lswresample -lavformat -lswscale -lavutil  -lavcodec  -lavdevice -lavfilter
+    LIBS += -LD:\SDL\SDL2\SDL2-2.32.0\x86_64-w64-mingw32\lib -lSDL2 -lSDL2main
+    LIBS += -lpthread
+}
+
+macx {
+    INCLUDEPATH += /opt/homebrew/include
+
+    LIBS += -L/opt/homebrew/lib -lswresample -lavformat -lswscale -lavutil  -lavcodec  -lavdevice -lavfilter
+    LIBS += -L/opt/homebrew/lib -lSDL2 -lSDL2main
+    LIBS += -lpthread
+}
