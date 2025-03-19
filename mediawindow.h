@@ -77,6 +77,18 @@ private:
 
     int freeSdl();
 
+    void setupUI();
+    void setupConnections();
+    void setupControlPanel();
+
+    // 辅助函数：创建 Frame
+    QFrame* createFrame(QSizePolicy::Policy hPolicy, QSizePolicy::Policy vPolicy);
+    // 辅助函数：创建 Slider
+    QSlider* createSlider(int min, int max, int value);
+    // 辅助函数：创建 Button
+    QPushButton* createButton(const QString& text);
+
+
 signals:
     void sigStartPlay();
     void sigSetFilePath(const QString &filePath);

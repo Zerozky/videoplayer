@@ -5,6 +5,7 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
+    qDebug() << "App Run.";
     MediaWindow *mediaWindow = new MediaWindow();
     mediaWindow->show();
 

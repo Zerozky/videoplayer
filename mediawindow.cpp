@@ -21,122 +21,8 @@ MediaWindow::MediaWindow(QWidget *parent) :
     videoHeight(0),
     sdlInitialized(false)
 {
-    // Create the main layout with splitters
-    mainSplitter = new QSplitter(Qt::Horizontal, this);
-    leftSplitter = new QSplitter(Qt::Vertical);
-
-    // Create the three frames
-    videoFrame = new QFrame();
-    videoFrame->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
-    videoFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-
-    controlFrame = new QFrame();
-    controlFrame->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
-    controlFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-    rightFrame = new QFrame();
-    rightFrame->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
-    rightFrame->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-
-    // Add the video label to the video frame
-    videoLabel = new QLabel();
-    videoLabel->setAlignment(Qt::AlignCenter);
-    videoLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    videoLabel->setStyleSheet("background-color: black;");
-
-    QVBoxLayout *videoLayout = new QVBoxLayout(videoFrame);
-    videoLayout->setContentsMargins(0, 0, 0, 0);
-    videoLayout->addWidget(videoLabel);
-
-    // Add control buttons to the control frame
-    QVBoxLayout *controlLayout = new QVBoxLayout(controlFrame);
-    controlLayout->setContentsMargins(5, 5, 5, 5);
-    controlLayout->setSpacing(5);
-
-    QHBoxLayout *row1Layout = new QHBoxLayout();
-    progressSlider = new QSlider(Qt::Horizontal, controlFrame);
-    progressSlider->setRange(0, 1000);
-    progressSlider->setValue(0);
-    row1Layout->addWidget(new QLabel("Progress:", controlFrame));
-    row1Layout->addWidget(progressSlider, 1);
-    volumeSlider = new QSlider(Qt::Horizontal, controlFrame);
-    volumeSlider->setRange(0, 100);
-    volumeSlider->setValue(50);
-    row1Layout->addWidget(new QLabel("Volume:", controlFrame));
-    row1Layout->addWidget(volumeSlider, 0);
-    controlLayout->addLayout(row1Layout);
-
-    QHBoxLayout *row2Layout = new QHBoxLayout();
-    playButton = new QPushButton("Play", controlFrame);
-    row2Layout->addWidget(playButton);
-    row2Layout->addWidget(stopButton);  // stopButton 已在前面创建
-    rewindButton = new QPushButton("<<", controlFrame);
-    row2Layout->addWidget(rewindButton);
-    forwardButton = new QPushButton(">>", controlFrame);
-    row2Layout->addWidget(forwardButton);
-    row2Layout->addWidget(openButton);
-    row2Layout->addStretch();
-    timeInfoLabel = new QLabel("00:00 / 00:00", controlFrame);
-    row2Layout->addWidget(timeInfoLabel);
-    codecInfoLabel = new QLabel("HVC1 AAC", controlFrame);
-    row2Layout->addWidget(codecInfoLabel);
-    toggleControlPanelButton = new QPushButton("Hide Control Panel", controlFrame);
-    row2Layout->addWidget(toggleControlPanelButton);
-    togglePlaylistButton = new QPushButton("Close Playlist", controlFrame);
-    row2Layout->addWidget(togglePlaylistButton);
-    controlLayout->addLayout(row2Layout);
-
-    // openButton = new QPushButton("Open File");
-    // startButton = new QPushButton("Start");
-    // pauseButton = new QPushButton("Pause");
-    // stopButton = new QPushButton("Stop");
-
-    // startButton->setEnabled(false);
-
-    // QHBoxLayout *buttonLayout = new QHBoxLayout(controlFrame);
-    // buttonLayout->setContentsMargins(0, 0, 0, 0);
-    // buttonLayout->setSpacing(5);
-    // buttonLayout->addWidget(openButton);
-    // buttonLayout->addWidget(startButton);
-    // buttonLayout->addWidget(pauseButton);
-    // buttonLayout->addWidget(stopButton);
-
-    // Set up the splitters
-    leftSplitter->addWidget(videoFrame);
-    leftSplitter->addWidget(controlFrame);
-
-    mainSplitter->addWidget(leftSplitter);
-    mainSplitter->addWidget(rightFrame);
-
-    // Set initial splitter proportions
-    leftSplitter->setStretchFactor(0, 10); // Video takes 4 parts
-    leftSplitter->setStretchFactor(1, 1); // Controls take 1 part
-
-    mainSplitter->setStretchFactor(0, 8); // Left part takes 3 parts
-    mainSplitter->setStretchFactor(1, 2); // Right part takes 1 part
-
-    // Set up the window
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->addWidget(mainSplitter);
-
-    this->setMinimumSize(800, 600);
-
-    // Set up threads and connections
-    demuxThread = new QThread;
-    demuxWorker = new DemuxWorker;
-    demuxWorker->moveToThread(demuxThread);
-
-    connect(demuxThread, &QThread::finished, demuxWorker, &QObject::deleteLater);
-    connect(demuxWorker, SIGNAL(sigGetVideoInfo(int,int)), this, SLOT(initSdl(int,int)));
-    connect(demuxWorker, SIGNAL(sigGetFrame(AVFrame*)), this, SLOT(updateVideo(AVFrame*)));
-    connect(this, SIGNAL(sigStartPlay()), demuxWorker, SLOT(slotDoWork()));
-    connect(this, SIGNAL(sigSetFilePath(QString)), demuxWorker, SLOT(setFilePath(QString)));
-
-    // connect(openButton, SIGNAL(clicked(bool)), this, SLOT(openFile()));
-    // connect(startButton, SIGNAL(clicked(bool)), this, SLOT(startPlay()));
-    // connect(pauseButton, SIGNAL(clicked(bool)), this, SLOT(pausePlay()));
-    // connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
+    setupUI();
+    setupConnections();
 }
 
 MediaWindow::~MediaWindow()
@@ -274,6 +160,140 @@ int MediaWindow::freeSdl()
         sdlInitialized = false;
     }
     return 0;
+}
+
+void MediaWindow::setupUI()
+{
+    // 创建主布局 Splitter
+    mainSplitter = new QSplitter(Qt::Horizontal, this);
+    leftSplitter = new QSplitter(Qt::Vertical);
+
+    // 创建三大区域 Frame
+    videoFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    controlFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    rightFrame = createFrame(QSizePolicy::Preferred, QSizePolicy::Expanding);
+
+    // 视频显示区域
+    videoLabel = new QLabel();
+    videoLabel->setAlignment(Qt::AlignCenter);
+    videoLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    videoLabel->setStyleSheet("background-color: black;");
+
+    QVBoxLayout *videoLayout = new QVBoxLayout(videoFrame);
+    videoLayout->setContentsMargins(0, 0, 0, 0);
+    videoLayout->addWidget(videoLabel);
+
+    //控制面板
+    setupControlPanel();
+
+    // 组装 Splitter
+    leftSplitter->addWidget(videoFrame);
+    leftSplitter->addWidget(controlFrame);
+
+    mainSplitter->addWidget(leftSplitter);
+    mainSplitter->addWidget(rightFrame);
+
+    // 设置 Splitter 拉伸因子
+    leftSplitter->setStretchFactor(0, 10);
+    leftSplitter->setStretchFactor(1, 1);
+
+    mainSplitter->setStretchFactor(0, 8);
+    mainSplitter->setStretchFactor(1, 2);
+
+    // 主布局
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->addWidget(mainSplitter);
+
+    this->setMinimumSize(800, 600);
+}
+
+void MediaWindow::setupConnections()
+{
+    // 线程相关
+    demuxThread = new QThread;
+    demuxWorker = new DemuxWorker;
+    demuxWorker->moveToThread(demuxThread);
+
+    connect(demuxThread, &QThread::finished, demuxWorker, &QObject::deleteLater);
+    connect(demuxWorker, &DemuxWorker::sigGetVideoInfo, this, &MediaWindow::initSdl);
+    connect(demuxWorker, &DemuxWorker::sigGetFrame, this, &MediaWindow::updateVideo);
+    connect(this, &MediaWindow::sigStartPlay, demuxWorker, &DemuxWorker::slotDoWork);
+    connect(this, &MediaWindow::sigSetFilePath, demuxWorker, &DemuxWorker::setFilePath);
+
+    // 按钮连接
+    connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
+}
+
+void MediaWindow::setupControlPanel()
+{
+    QVBoxLayout *controlLayout = new QVBoxLayout(controlFrame);
+    controlLayout->setContentsMargins(5, 5, 5, 5);
+    controlLayout->setSpacing(5);
+
+    // 第一排：进度条 + 音量
+    QHBoxLayout *row1Layout = new QHBoxLayout();
+    progressSlider = createSlider(0, 1000, 0);
+    volumeSlider = createSlider(0, 100, 50);
+
+    row1Layout->addWidget(new QLabel("Progress:", controlFrame));
+    row1Layout->addWidget(progressSlider, 1);
+    row1Layout->addWidget(new QLabel("Volume:", controlFrame));
+    row1Layout->addWidget(volumeSlider, 0);
+
+    controlLayout->addLayout(row1Layout);
+
+    // 第二排：按钮
+    QHBoxLayout *row2Layout = new QHBoxLayout();
+    openButton = createButton("Open File");
+    playButton = createButton("Play");
+    stopButton = createButton("Stop");
+    rewindButton = createButton("<<");
+    forwardButton = createButton(">>");
+
+    row2Layout->addWidget(playButton);
+    row2Layout->addWidget(stopButton);
+    row2Layout->addWidget(rewindButton);
+    row2Layout->addWidget(forwardButton);
+    row2Layout->addWidget(openButton);
+    row2Layout->addStretch();
+
+    // 信息标签
+    timeInfoLabel = new QLabel("00:00 / 00:00", controlFrame);
+    codecInfoLabel = new QLabel("HVC1 AAC", controlFrame);
+
+    row2Layout->addWidget(timeInfoLabel);
+    row2Layout->addWidget(codecInfoLabel);
+
+    // 控制面板开关按钮
+    toggleControlPanelButton = new QPushButton("Hide Control Panel", controlFrame);
+    togglePlaylistButton = new QPushButton("Close Playlist", controlFrame);
+
+    row2Layout->addWidget(toggleControlPanelButton);
+    row2Layout->addWidget(togglePlaylistButton);
+
+    controlLayout->addLayout(row2Layout);
+}
+
+QFrame *MediaWindow::createFrame(QSizePolicy::Policy hPolicy, QSizePolicy::Policy vPolicy)
+{
+    QFrame* frame = new QFrame();
+    frame->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
+    frame->setSizePolicy(hPolicy, vPolicy);
+    return frame;
+}
+
+QSlider *MediaWindow::createSlider(int min, int max, int value)
+{
+    QSlider* slider = new QSlider(Qt::Horizontal);
+    slider->setRange(min, max);
+    slider->setValue(value);
+    return slider;
+}
+
+QPushButton *MediaWindow::createButton(const QString &text)
+{
+    return new QPushButton(text);
 }
 
 void MediaWindow::updateVideo(AVFrame *pFrame)

@@ -201,7 +201,6 @@ void DemuxWorker::slotDoWork()
     }
 
     QElapsedTimer timer;
-    double lastFrameTime = 0;
     timer.start(); // 计时器开始
 
     for (;;) {
