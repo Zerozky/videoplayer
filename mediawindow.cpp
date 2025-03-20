@@ -98,15 +98,36 @@ void MediaWindow::pausePlay()
 
 void MediaWindow::stopPlay()
 {
-    QMessageBox::StandardButton button = QMessageBox::information(this,"提示","退出",QMessageBox::Ok,QMessageBox::Cancel);
-    if(button==QMessageBox::Ok)
+#ifdef Q_OS_MAC
+    // 在 macOS 上直接退出，不弹出 QMessageBox
+    demuxWorker->isPlay = false;
+    demuxThread->quit();
+    demuxThread->wait();
+    close();
+#else
+    QMessageBox::StandardButton button = QMessageBox::information(
+        this,
+        tr("提示"),
+        tr("退出"),
+        QMessageBox::Ok | QMessageBox::Cancel,
+        QMessageBox::Ok
+    );
+
+    if(button == QMessageBox::Ok)
     {
+        // 停止 demuxWorker 线程并等待退出
         demuxWorker->isPlay = false;
-        QEventLoop loop;
-        QTimer::singleShot(1.5 * 1000, &loop, SLOT(quit()));
-        QTimer::singleShot(2 * 1000, this, SLOT(close()));
-        loop.exec();
+        demuxThread->quit();
+        demuxThread->wait();
+
+        QTimer::singleShot(2000, this, SLOT(close()));
+
+        // QEventLoop loop;
+        // QTimer::singleShot(1.5 * 1000, &loop, SLOT(quit()));
+        // QTimer::singleShot(2 * 1000, this, SLOT(close()));
+        // loop.exec();
     }
+#endif
     qDebug()<< "stop play";
 }
 
@@ -152,7 +173,9 @@ int MediaWindow::freeSdl()
     {
         if (sdlRenderer) SDL_DestroyRenderer(sdlRenderer);
         if (sdlTexture) SDL_DestroyTexture(sdlTexture);
+#ifndef Q_OS_MAC
         if (sdlWindow) SDL_DestroyWindow(sdlWindow);
+#endif
         sdlRenderer = nullptr;
         sdlTexture = nullptr;
         sdlWindow = nullptr;
@@ -175,6 +198,7 @@ void MediaWindow::setupUI()
 
     // 视频显示区域
     videoLabel = new QLabel();
+    videoLabel->setAttribute(Qt::WA_NativeWindow);
     videoLabel->setAlignment(Qt::AlignCenter);
     videoLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     videoLabel->setStyleSheet("background-color: black;");
