@@ -46,7 +46,6 @@ private:
     QLabel *videoLabel;           // Widget to attach SDL renderer
 
     // Control components
-    QPushButton *startButton;
     QPushButton *pauseButton;
     QPushButton *stopButton;
     QPushButton *openButton;

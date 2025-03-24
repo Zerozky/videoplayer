@@ -53,19 +53,28 @@ void MediaWindow::openFile()
         sdlInitialized = false;
     }
 
-    // Open file dialog
+#ifdef Q_OS_MAC
+    // 在 macOS 下使用 nullptr 作为父窗口
+    QString filePath = QFileDialog::getOpenFileName(
+        nullptr,
+        tr("Open Video File"),
+        QString(),
+        tr("Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*.*)")
+        );
+#else
     QString filePath = QFileDialog::getOpenFileName(
         this,
         tr("Open Video File"),
         QString(),
         tr("Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*.*)")
         );
+#endif
 
     if (!filePath.isEmpty())
     {
         selectedFilePath = filePath;
         emit sigSetFilePath(selectedFilePath);
-        startButton->setEnabled(true);
+        playButton->setEnabled(true);
 
         // Update window title to show selected file
         setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
@@ -78,7 +87,7 @@ void MediaWindow::startPlay()
     {
         demuxThread->start();
         emit sigStartPlay();
-        startButton->setEnabled(false);
+        playButton->setEnabled(false);
     }
 }
 
@@ -247,6 +256,9 @@ void MediaWindow::setupConnections()
 
     // 按钮连接
     connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
+    connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
+    connect(pauseButton, &QPushButton::clicked, this, &MediaWindow::pausePlay);
+    connect(playButton, &QPushButton::clicked, this, &MediaWindow::startPlay);
 }
 
 void MediaWindow::setupControlPanel()
