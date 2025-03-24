@@ -23,6 +23,11 @@ MediaWindow::MediaWindow(QWidget *parent) :
 {
     setupUI();
     setupConnections();
+
+    // 按钮连接
+    connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
+    connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
+    connect(playButton, &QPushButton::clicked, this, &MediaWindow::togglePlayPause);
 }
 
 MediaWindow::~MediaWindow()
@@ -100,18 +105,20 @@ void MediaWindow::togglePlayPause()
 {
     if (demuxWorker)
     {
-        // 如果当前处于暂停状态，则恢复播放
-        if (demuxWorker->isPause)
-        {
-            demuxWorker->isPause = false;
-            playButton->setText("Pause");
+        // 切换暂停状态
+        demuxWorker->pauseMutex.lock();
+        demuxWorker->isPause = !demuxWorker->isPause;
+        qDebug() << "togglePlayPause: isPause =" << demuxWorker->isPause;
+        // 如果从暂停恢复，唤醒解码线程并重置计时器基准
+        if(!demuxWorker->isPause) {
+            demuxWorker->pauseCondition.wakeAll();
         }
-        else
-        {
-            // 处于播放状态时，暂停播放
-            demuxWorker->isPause = true;
+        demuxWorker->pauseMutex.unlock();
+        // 更新按钮文本
+        if(demuxWorker->isPause)
             playButton->setText("Play");
-        }
+        else
+            playButton->setText("Pause");
     }
 }
 
@@ -269,10 +276,6 @@ void MediaWindow::setupConnections()
     connect(this, &MediaWindow::sigStartPlay, demuxWorker, &DemuxWorker::slotDoWork);
     connect(this, &MediaWindow::sigSetFilePath, demuxWorker, &DemuxWorker::setFilePath);
 
-    // 按钮连接
-    connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
-    connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
-    connect(playButton, &QPushButton::clicked, this, &MediaWindow::togglePlayPause);
 }
 
 void MediaWindow::setupControlPanel()

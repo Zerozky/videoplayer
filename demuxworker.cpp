@@ -93,14 +93,14 @@ void DemuxWorker::slotDoWork()
 
     // 查找音视频流索引
     for(unsigned int i = 0; i < avFormatContext->nb_streams; i++){
-        if(avFormatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO){
+        if(avFormatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
             audioStream = static_cast<int>(i);
         }
-        else if(avFormatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO){
+        else if(avFormatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             videoStream = static_cast<int>(i);
         }
     }
-    if(audioStream == -1 && videoStream == -1){
+    if(audioStream == -1 && videoStream == -1) {
         qDebug() << "Didn't find a valid stream";
         return;
     }
@@ -195,27 +195,24 @@ void DemuxWorker::slotDoWork()
             qDebug() << "无法初始化 SwrContext";
         }
     }
-
-    qint64 pauseOffset = 0;
-    qint64 pauseStartTime = 0;
+    
+    // 重置暂停累计
+    pauseAccumulated = 0;
+    // 用 timer 记录起始时间，此时 baseTime 为 0
+    baseTime = 0;
     QElapsedTimer timer;
-    timer.start(); // 计时器开始
+    timer.start();
 
     while(isPlay) {
-        // 如果暂停，等待并重置计时器
-        if (isPause)
-        {
-            if (pauseStartTime == 0) {
-                pauseStartTime = timer.elapsed();
-            }
-            QThread::msleep(100);
-            continue;
-        } else {
-            if (pauseStartTime != 0) {
-                pauseOffset += (timer.elapsed() - pauseStartTime);
-                pauseStartTime = 0;
-            }
+        // 采用阻塞等待暂停状态
+        pauseMutex.lock();
+        while(isPause && isPlay) {
+            pauseCondition.wait(&pauseMutex);
+            // 当从暂停中恢复时，更新 baseTime：使得有效播放时间连续
+            // 这里我们设定 baseTime 为当前 timer.elapsed()，从而“重置”计时器基准
+            baseTime = timer.elapsed();
         }
+        pauseMutex.unlock();
 
         // 4.从文件中获取数据包
         if(av_read_frame(avFormatContext, packet) < 0){
@@ -254,12 +251,12 @@ void DemuxWorker::slotDoWork()
                 // double delay = currentPts - audioTime;
 
                 // 计算有效播放时间（秒）
-                double effectiveTime = (timer.elapsed() - pauseOffset) / 1000.0;
+                double effectiveTime = (timer.elapsed() - baseTime) / 1000.0;
                 double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
                 double delay = currentPts - effectiveTime;
                 if (delay > 0) {
                     // 延时等待视频帧显示时机到来
-                    qDebug() << "delay : " << delay;
+                    // qDebug() << "delay : " << delay;
                     QThread::msleep(static_cast<unsigned long>(delay * 1000));
                 }
 
