@@ -40,13 +40,12 @@ private:
     QSplitter *leftSplitter;      // Left vertical splitter
     QFrame *videoFrame;           // Left top frame for video
     QFrame *controlFrame;         // Left bottom frame for controls
-    QFrame *rightFrame;           // Right frame (empty for now)
+    QFrame *rightFrame;           // Right frame (播放列表)
 
     // Video components
     QLabel *videoLabel;           // Widget to attach SDL renderer
 
     // Control components
-    QPushButton *pauseButton;
     QPushButton *stopButton;
     QPushButton *openButton;
 
@@ -94,9 +93,9 @@ signals:
 
 public slots:
     void startPlay();
-    void pausePlay();
     void stopPlay();
     void openFile();
+    void togglePlayPause();
     void updateVideo(AVFrame *pFrame);
     int initSdl(int mWidth,int mHeight);
 };

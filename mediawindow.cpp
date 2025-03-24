@@ -43,14 +43,18 @@ void MediaWindow::resizeEvent(QResizeEvent *event)
 
 void MediaWindow::openFile()
 {
-    // Stop playback if already playing
-    if (demuxThread->isRunning())
+    // 停止已有播放（如果正在播放）
+    if (demuxThread && demuxThread->isRunning())
     {
         demuxWorker->isPlay = false;
         demuxThread->quit();
         demuxThread->wait();
         freeSdl();
         sdlInitialized = false;
+        demuxThread->deleteLater();
+        demuxWorker->deleteLater();
+        demuxThread = nullptr;
+        demuxWorker = nullptr;
     }
 
 #ifdef Q_OS_MAC
@@ -73,11 +77,41 @@ void MediaWindow::openFile()
     if (!filePath.isEmpty())
     {
         selectedFilePath = filePath;
-        emit sigSetFilePath(selectedFilePath);
-        playButton->setEnabled(true);
+        // 重新创建线程和 worker
+        demuxThread = new QThread;
+        demuxWorker = new DemuxWorker;
+        demuxWorker->moveToThread(demuxThread);
+        setupConnections();  // 重新建立连接
 
-        // Update window title to show selected file
+        emit sigSetFilePath(selectedFilePath);
+        // 自动启动播放
+        startPlay();
+
+        // 启用并设置 playButton 文本为 "Pause"
+        playButton->setEnabled(true);
+        playButton->setText("Pause");
+
+        // 更新窗口标题
         setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
+    }
+}
+
+void MediaWindow::togglePlayPause()
+{
+    if (demuxWorker)
+    {
+        // 如果当前处于暂停状态，则恢复播放
+        if (demuxWorker->isPause)
+        {
+            demuxWorker->isPause = false;
+            playButton->setText("Pause");
+        }
+        else
+        {
+            // 处于播放状态时，暂停播放
+            demuxWorker->isPause = true;
+            playButton->setText("Play");
+        }
     }
 }
 
@@ -87,57 +121,38 @@ void MediaWindow::startPlay()
     {
         demuxThread->start();
         emit sigStartPlay();
-        playButton->setEnabled(false);
-    }
-}
-
-void MediaWindow::pausePlay()
-{
-    if(demuxWorker->isPause)
-    {
-        demuxWorker->isPause = false;
-        pauseButton->setText("pause");
-    }
-    else
-    {
-        demuxWorker->isPause = true;
-        pauseButton ->setText("continue");
+        playButton->setText("pause");
+        playButton->setEnabled(true);
     }
 }
 
 void MediaWindow::stopPlay()
 {
-#ifdef Q_OS_MAC
-    // 在 macOS 上直接退出，不弹出 QMessageBox
-    demuxWorker->isPlay = false;
-    demuxThread->quit();
-    demuxThread->wait();
-    close();
-#else
-    QMessageBox::StandardButton button = QMessageBox::information(
-        this,
-        tr("提示"),
-        tr("退出"),
-        QMessageBox::Ok | QMessageBox::Cancel,
-        QMessageBox::Ok
-    );
-
-    if(button == QMessageBox::Ok)
-    {
-        // 停止 demuxWorker 线程并等待退出
+    if (demuxWorker) {
+        // 停止播放视频
         demuxWorker->isPlay = false;
         demuxThread->quit();
         demuxThread->wait();
-
-        QTimer::singleShot(2000, this, SLOT(close()));
-
-        // QEventLoop loop;
-        // QTimer::singleShot(1.5 * 1000, &loop, SLOT(quit()));
-        // QTimer::singleShot(2 * 1000, this, SLOT(close()));
-        // loop.exec();
     }
-#endif
-    qDebug()<< "stop play";
+    freeSdl();
+    sdlInitialized = false;
+
+    // 将视频区域恢复为黑色（重置背景）
+    videoLabel->setStyleSheet("background-color: black;");
+
+    // 恢复按钮状态
+    playButton->setEnabled(true);
+    playButton->setText("Play");
+
+    // 删除线程和 worker，并置空
+    if(demuxThread) {
+        demuxThread->deleteLater();
+        demuxThread = nullptr;
+    }
+    if(demuxWorker) {
+        demuxWorker->deleteLater();
+        demuxWorker = nullptr;
+    }
 }
 
 int MediaWindow::initSdl(int mWidth,int mHeight)
@@ -257,8 +272,7 @@ void MediaWindow::setupConnections()
     // 按钮连接
     connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
     connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
-    connect(pauseButton, &QPushButton::clicked, this, &MediaWindow::pausePlay);
-    connect(playButton, &QPushButton::clicked, this, &MediaWindow::startPlay);
+    connect(playButton, &QPushButton::clicked, this, &MediaWindow::togglePlayPause);
 }
 
 void MediaWindow::setupControlPanel()
@@ -286,6 +300,8 @@ void MediaWindow::setupControlPanel()
     stopButton = createButton("Stop");
     rewindButton = createButton("<<");
     forwardButton = createButton(">>");
+
+    playButton->setEnabled(false);
 
     row2Layout->addWidget(playButton);
     row2Layout->addWidget(stopButton);

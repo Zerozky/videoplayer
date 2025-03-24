@@ -1,6 +1,5 @@
 #include "demuxworker.h"
 #include <QDebug>
-#include <iostream>
 #include <QLabel>
 #include <QTime>
 #include <QCoreApplication>
@@ -67,11 +66,8 @@ void DemuxWorker::slotDoWork()
 
     QByteArray filePathBytes = filePath.toLocal8Bit();
     char *fileName = filePathBytes.data();
-    // char *fileName = "D:/S02E001.mp4";
-    // char *fileName = "http://demo-videos.qnsdk.com/bbk-H265-50fps.mp4";
-    // char *fileName = "S:/电影下载/BMcwnuIW_TimeCut_Video_2022-05-24_16_38_25.mp4";
-    // char *fileName = "S:/电影下载/Resident.Evil.2002.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT/Resident.Evil.2002.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT.mkv";
 
+    // 标记播放状态
     isPlay = true;
     isPause = false;
 
@@ -95,7 +91,7 @@ void DemuxWorker::slotDoWork()
         return;
     }
 
-    //查找音视频流索引
+    // 查找音视频流索引
     for(unsigned int i = 0; i < avFormatContext->nb_streams; i++){
         if(avFormatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO){
             audioStream = static_cast<int>(i);
@@ -109,7 +105,7 @@ void DemuxWorker::slotDoWork()
         return;
     }
 
-    //视频
+    // 初始化视频解码器
     AVCodecContext *pVideoCodecContext = nullptr;
     const AVCodec   *pCodecVideo = nullptr;
     AVCodecParameters *pVideoCodecPara = nullptr;
@@ -121,30 +117,30 @@ void DemuxWorker::slotDoWork()
         //1.分配编解码器上下文
         pVideoCodecContext =  avcodec_alloc_context3(nullptr);
         if (!pVideoCodecContext){
-            qDebug() <<  "avcodec_alloc_context3";
+            qDebug() <<  "avcodec_alloc_context3 failed";
             return;
         }
 
         //2.将码流中的编解码器信息拷贝到AVCodecContext
         err = avcodec_parameters_to_context(pVideoCodecContext, pVideoCodecPara);
         if (err < 0){
-            qDebug() << "avcodec_parameters_to_context";
+            qDebug() << "avcodec_parameters_to_context failed";
             return;
         }
 
         //3.根据编解码器信息查找相应的解码器
         pCodecVideo = avcodec_find_decoder(pVideoCodecPara->codec_id);
         if(pCodecVideo == nullptr){
-            qDebug() <<  "avcodec_find_decoder";
+            qDebug() <<  "avcodec_find_decoder failed";
             return;
         }
 
-        qDebug() << "编解码器名:" << pCodecVideo->long_name;
+        qDebug() << "视频编解码器名:" << pCodecVideo->long_name;
 
         //4.打开编解码器并关联到AVCodecContext
         err = avcodec_open2(pVideoCodecContext, pCodecVideo, nullptr);
         if(err){
-            qDebug() << "avcodec_open2";
+            qDebug() << "avcodec_open2 failed";
             return;
         }
 
@@ -152,7 +148,7 @@ void DemuxWorker::slotDoWork()
         qDebug() << "视频宽度:" << pVideoCodecContext->width << "高度:" << pVideoCodecContext->height;
     }
 
-    // === 音频解码部分 ===
+    // 初始化音频解码器
     AVCodecContext *pAudioCodecContext = nullptr;
     QAudioSink *audioSink = nullptr;
     QIODevice *audioDevice = nullptr;
@@ -200,25 +196,42 @@ void DemuxWorker::slotDoWork()
         }
     }
 
+    qint64 pauseOffset = 0;
+    qint64 pauseStartTime = 0;
     QElapsedTimer timer;
     timer.start(); // 计时器开始
 
-    for (;;) {
+    while(isPlay) {
+        // 如果暂停，等待并重置计时器
         if (isPause)
         {
-            mSleep(1000);
+            if (pauseStartTime == 0) {
+                pauseStartTime = timer.elapsed();
+            }
+            QThread::msleep(100);
             continue;
+        } else {
+            if (pauseStartTime != 0) {
+                pauseOffset += (timer.elapsed() - pauseStartTime);
+                pauseStartTime = 0;
+            }
         }
 
-        //4.从文件中获取数据包
+        // 4.从文件中获取数据包
         if(av_read_frame(avFormatContext, packet) < 0){
-            goto end;
+            break;
+        }
+
+        // 如果在处理数据包过程中被设置为停止，则跳出循环
+        if (!isPlay) {
+            av_packet_unref(packet);
+            break;
         }
 
         // 处理视频帧
         if(packet->stream_index == videoStream)
         {
-            //5.1向解码器发送数据包
+            // 5.1向解码器发送数据包
             err = avcodec_send_packet(pVideoCodecContext, packet);
             if(err != 0) {
                 if(AVERROR(EAGAIN) == err)
@@ -228,24 +241,29 @@ void DemuxWorker::slotDoWork()
 
             //5.2接收解码后的帧
             while(avcodec_receive_frame(pVideoCodecContext, pFrame) == 0) {
-                // 计算当前帧的播放时间 (秒)
+                if (!isPlay) {
+                    break;
+                }
+                // // 计算当前帧的播放时间 (秒)
+                // double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
+
+                // // 采用音频时钟作为同步基准，如果没有音频则回退到 QElapsedTimer
+                // double audioTime = audioSink ? (audioSink->elapsedUSecs() / 1000000.0) : (timer.elapsed() / 1000.0);
+
+                // // 计算帧与上一帧的延迟
+                // double delay = currentPts - audioTime;
+
+                // 计算有效播放时间（秒）
+                double effectiveTime = (timer.elapsed() - pauseOffset) / 1000.0;
                 double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
-
-                // 计算播放同步时间
-                // double elapsedTime = timer.elapsed() / 1000.0;  // 当前系统时间，毫秒转换为秒
-
-                // 采用音频时钟作为同步基准，如果没有音频则回退到 QElapsedTimer（你可以提前启动一个 timer）
-                double audioTime = audioSink ? (audioSink->elapsedUSecs() / 1000000.0) : (timer.elapsed() / 1000.0);
-
-                // 计算帧与上一帧的延迟
-                double delay = currentPts - audioTime;
-
+                double delay = currentPts - effectiveTime;
                 if (delay > 0) {
                     // 延时等待视频帧显示时机到来
+                    qDebug() << "delay : " << delay;
                     QThread::msleep(static_cast<unsigned long>(delay * 1000));
                 }
 
-                // 克隆当前帧，确保传递给 UI 的数据不会被后续解码覆盖
+                // 克隆当前帧，发送到 UI 渲染
                 AVFrame *frameClone = av_frame_clone(pFrame);
                 if (!frameClone) {
                     qDebug() << "克隆视频帧失败";
@@ -264,7 +282,7 @@ void DemuxWorker::slotDoWork()
             }
 
             while (avcodec_receive_frame(pAudioCodecContext, pFrame) == 0) {
-                // 进行音频重采样
+                // 进行音频重采样并写入音频设备
                 AVFrame *resampledFrame = av_frame_alloc();
                 // 使用 av_channel_layout_default 设定通道布局
                 av_channel_layout_default(&resampledFrame->ch_layout, 2);  // 2 代表立体声
@@ -279,8 +297,11 @@ void DemuxWorker::slotDoWork()
 
                 // 计算音频数据大小
                 int dataSize = av_samples_get_buffer_size(
-                    nullptr, 2, resampledFrame->nb_samples,
-                    AV_SAMPLE_FMT_S16, 1);
+                    nullptr,
+                    2,
+                    resampledFrame->nb_samples,
+                    AV_SAMPLE_FMT_S16,
+                    1);
 
                 // 将数据写入 QAudioSink
                 if (audioDevice) {
@@ -292,19 +313,25 @@ void DemuxWorker::slotDoWork()
         }
 
         av_packet_unref(packet); // 注意清理，容易造成内存泄漏
-        continue;
-
-        if (!isPlay)
-        {
-            goto end;
-        }
     }
 
-end:
+    // 停止音频设备
+    if (audioSink) {
+        audioSink->stop();
+        // 释放音频相关资源，如有必要 delete audioSink;
+    }
     //6.关闭解码器和释放上下文
-    avcodec_close(pVideoCodecContext);
-    avcodec_close(pAudioCodecContext);
+    if (pVideoCodecContext) {
+        avcodec_close(pVideoCodecContext);
+    }
+    if (pAudioCodecContext) {
+        avcodec_close(pAudioCodecContext);
+    }
     //5.关闭解复用器
     avformat_close_input(&avFormatContext);
     qDebug() << "end of play";
+
+    // 释放 packet 和 pFrame
+    av_packet_free(&packet);
+    av_frame_free(&pFrame);
 }

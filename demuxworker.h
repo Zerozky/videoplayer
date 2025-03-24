@@ -9,7 +9,7 @@
 #include <QString>
 extern "C"
 {
-#include "libavformat/avformat.h"
+#include "libavutil/frame.h"
 };
 
 class DemuxWorker : public QObject
