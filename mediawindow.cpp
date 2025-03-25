@@ -114,6 +114,7 @@ void MediaWindow::togglePlayPause()
             demuxWorker->pauseCondition.wakeAll();
         }
         demuxWorker->pauseMutex.unlock();
+
         // 更新按钮文本
         if(demuxWorker->isPause)
             playButton->setText("Play");

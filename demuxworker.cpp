@@ -85,7 +85,6 @@ void DemuxWorker::slotDoWork()
     }
 
     //3.读取媒体的部分数据包以获取码流信息
-    // Retrieve stream information
     if(avformat_find_stream_info(avFormatContext, nullptr)<0){
         qDebug() << "Couldn't find stream information";
         return;
@@ -196,23 +195,35 @@ void DemuxWorker::slotDoWork()
         }
     }
     
-    // 重置暂停累计
-    pauseAccumulated = 0;
-    // 用 timer 记录起始时间，此时 baseTime 为 0
-    baseTime = 0;
+    // 记录开始播放时间和暂停累计时间
+    qint64 startTime = 0;
+    qint64 pauseTotal = 0;
+    qint64 pauseStart = 0;
     QElapsedTimer timer;
     timer.start();
+    startTime = timer.elapsed();  // 初始播放时间
 
     while(isPlay) {
-        // 采用阻塞等待暂停状态
+        // 如果暂停，则进入阻塞等待状态
         pauseMutex.lock();
         while(isPause && isPlay) {
-            pauseCondition.wait(&pauseMutex);
-            // 当从暂停中恢复时，更新 baseTime：使得有效播放时间连续
-            // 这里我们设定 baseTime 为当前 timer.elapsed()，从而“重置”计时器基准
-            baseTime = timer.elapsed();
+            if (pauseStart == 0) {
+                pauseStart = timer.elapsed();
+            }
+            // 等待100ms，便于周期性检查 isPlay
+            pauseCondition.wait(&pauseMutex, 100);
+        }
+        // 如果刚从暂停恢复，则累计暂停时长
+        if (!isPause && pauseStart != 0) {
+            pauseTotal += (timer.elapsed() - pauseStart);
+            pauseStart = 0;
         }
         pauseMutex.unlock();
+
+        // 检查停止标志
+        if (!isPlay) {
+            break;
+        }
 
         // 4.从文件中获取数据包
         if(av_read_frame(avFormatContext, packet) < 0){
@@ -241,22 +252,13 @@ void DemuxWorker::slotDoWork()
                 if (!isPlay) {
                     break;
                 }
-                // // 计算当前帧的播放时间 (秒)
-                // double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
-
-                // // 采用音频时钟作为同步基准，如果没有音频则回退到 QElapsedTimer
-                // double audioTime = audioSink ? (audioSink->elapsedUSecs() / 1000000.0) : (timer.elapsed() / 1000.0);
-
-                // // 计算帧与上一帧的延迟
-                // double delay = currentPts - audioTime;
 
                 // 计算有效播放时间（秒）
-                double effectiveTime = (timer.elapsed() - baseTime) / 1000.0;
+                double effectiveTime = (timer.elapsed() - startTime - pauseTotal) / 1000.0;
                 double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
                 double delay = currentPts - effectiveTime;
                 if (delay > 0) {
                     // 延时等待视频帧显示时机到来
-                    // qDebug() << "delay : " << delay;
                     QThread::msleep(static_cast<unsigned long>(delay * 1000));
                 }
 
@@ -312,10 +314,9 @@ void DemuxWorker::slotDoWork()
         av_packet_unref(packet); // 注意清理，容易造成内存泄漏
     }
 
-    // 停止音频设备
+    // 清理工作
     if (audioSink) {
         audioSink->stop();
-        // 释放音频相关资源，如有必要 delete audioSink;
     }
     //6.关闭解码器和释放上下文
     if (pVideoCodecContext) {
