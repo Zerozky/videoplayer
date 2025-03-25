@@ -22,6 +22,11 @@ MediaWindow::MediaWindow(QWidget *parent) :
     sdlInitialized(false)
 {
     setupUI();
+
+    demuxThread = new QThread;
+    demuxWorker = new DemuxWorker;
+    demuxWorker->moveToThread(demuxThread);
+
     setupConnections();
 
     // 按钮连接
@@ -48,57 +53,69 @@ void MediaWindow::resizeEvent(QResizeEvent *event)
 
 void MediaWindow::openFile()
 {
-    // 停止已有播放（如果正在播放）
-    if (demuxThread && demuxThread->isRunning())
-    {
-        demuxWorker->isPlay = false;
+    // 如果之前已有 demuxThread 或 demuxWorker（不论是否正在运行），先清理干净
+    if (demuxWorker) {
+        // 如果线程正处于暂停状态，先唤醒它
+        demuxWorker->pauseMutex.lock();
+        demuxWorker->isPause = false;
+        demuxWorker->pauseCondition.wakeAll();
+        demuxWorker->pauseMutex.unlock();
+        qDebug() << "demuxWorker 如果线程正处于暂停状态，先唤醒它";
+    }
+    if (demuxThread) {
+        if(demuxWorker)
+            demuxWorker->isPlay = false;  // 通知停止
         demuxThread->quit();
         demuxThread->wait();
-        freeSdl();
-        sdlInitialized = false;
         demuxThread->deleteLater();
-        demuxWorker->deleteLater();
         demuxThread = nullptr;
+        qDebug() << "demuxThread clear";
+    }
+    if (demuxWorker) {
+        demuxWorker->deleteLater();
         demuxWorker = nullptr;
+        qDebug() << "demuxWorker clear";
     }
+    // 释放 SDL 资源
+    freeSdl();
+    sdlInitialized = false;
+    qDebug() << "SDL free";
 
-#ifdef Q_OS_MAC
-    // 在 macOS 下使用 nullptr 作为父窗口
-    QString filePath = QFileDialog::getOpenFileName(
-        nullptr,
-        tr("Open Video File"),
-        QString(),
-        tr("Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*.*)")
-        );
-#else
-    QString filePath = QFileDialog::getOpenFileName(
-        this,
-        tr("Open Video File"),
-        QString(),
-        tr("Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*.*)")
-        );
-#endif
+    QTimer::singleShot(100, this, [this]() {
+        QString filePath = QFileDialog::getOpenFileName(
+            nullptr,
+            tr("Open Video File"),
+            QString(),
+            tr("Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*.*)"),
+            nullptr,
+            QFileDialog::DontUseNativeDialog
+            );
 
-    if (!filePath.isEmpty())
-    {
-        selectedFilePath = filePath;
-        // 重新创建线程和 worker
-        demuxThread = new QThread;
-        demuxWorker = new DemuxWorker;
-        demuxWorker->moveToThread(demuxThread);
-        setupConnections();  // 重新建立连接
 
-        emit sigSetFilePath(selectedFilePath);
-        // 自动启动播放
-        startPlay();
+        qDebug() << "mediawindow.cpp filename " << filePath;
+        if (!filePath.isEmpty())
+        {
+            selectedFilePath = filePath;
+            // 重新创建线程和 worker
+            demuxThread = new QThread;
+            demuxWorker = new DemuxWorker;
+            demuxWorker->moveToThread(demuxThread);
+            setupConnections();  // 重新建立连接
 
-        // 启用并设置 playButton 文本为 "Pause"
-        playButton->setEnabled(true);
-        playButton->setText("Pause");
+            qDebug() << "重新建立连接";
 
-        // 更新窗口标题
-        setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
-    }
+            emit sigSetFilePath(selectedFilePath);
+            // 自动启动播放
+            startPlay();
+
+            // 启用并设置 playButton 文本为 "Pause"
+            playButton->setEnabled(true);
+            playButton->setText("Pause");
+
+            // 更新窗口标题
+            setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
+        }
+    });
 }
 
 void MediaWindow::togglePlayPause()
@@ -266,11 +283,6 @@ void MediaWindow::setupUI()
 
 void MediaWindow::setupConnections()
 {
-    // 线程相关
-    demuxThread = new QThread;
-    demuxWorker = new DemuxWorker;
-    demuxWorker->moveToThread(demuxThread);
-
     connect(demuxThread, &QThread::finished, demuxWorker, &QObject::deleteLater);
     connect(demuxWorker, &DemuxWorker::sigGetVideoInfo, this, &MediaWindow::initSdl);
     connect(demuxWorker, &DemuxWorker::sigGetFrame, this, &MediaWindow::updateVideo);
