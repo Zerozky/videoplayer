@@ -1,5 +1,6 @@
 #include "mediawindow.h"
 
+#include "demuxworker.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QMessageBox>
@@ -11,21 +12,21 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QDebug>
+#include <QWindow>
+#include <QImage>
+extern "C" {
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
+}
 
 MediaWindow::MediaWindow(QWidget *parent) :
-    QWidget(parent),
-    sdlRenderer(nullptr),
-    sdlTexture(nullptr),
-    sdlWindow(nullptr),
-    videoWidth(0),
-    videoHeight(0),
-    sdlInitialized(false)
+    QWidget(parent)
 {
     setupUI();
 
-    demuxThread = new QThread;
-    demuxWorker = new DemuxWorker;
-    demuxWorker->moveToThread(demuxThread);
+    // demuxThread = new QThread;
+    // demuxWorker = new DemuxWorker;
+    // demuxWorker->moveToThread(demuxThread);
 
     setupConnections();
 
@@ -37,18 +38,18 @@ MediaWindow::MediaWindow(QWidget *parent) :
 
 MediaWindow::~MediaWindow()
 {
-    freeSdl();
-    if (demuxThread->isRunning())
+    // 停止播放，清理线程
+    if (demuxThread && demuxThread->isRunning())
     {
         demuxWorker->isPlay = false;
+        demuxThread->requestInterruption();
         demuxThread->quit();
         demuxThread->wait();
     }
-}
-
-void MediaWindow::resizeEvent(QResizeEvent *event)
-{
-    QWidget::resizeEvent(event);
+    if(demuxThread)
+        demuxThread->deleteLater();
+    if(demuxWorker)
+        demuxWorker->deleteLater();
 }
 
 void MediaWindow::openFile()
@@ -70,17 +71,16 @@ void MediaWindow::openFile()
         demuxThread->deleteLater();
         demuxThread = nullptr;
         qDebug() << "demuxThread clear";
+
     }
-    if (demuxWorker) {
+    if (demuxWorker)
+    {
         demuxWorker->deleteLater();
         demuxWorker = nullptr;
         qDebug() << "demuxWorker clear";
     }
-    // 释放 SDL 资源
-    freeSdl();
-    sdlInitialized = false;
-    qDebug() << "SDL free";
 
+    // 使用延时调用，确保旧资源已清理完毕
     QTimer::singleShot(100, this, [this]() {
         QString filePath = QFileDialog::getOpenFileName(
             nullptr,
@@ -91,28 +91,24 @@ void MediaWindow::openFile()
             QFileDialog::DontUseNativeDialog
             );
 
-
-        qDebug() << "mediawindow.cpp filename " << filePath;
+        qDebug() << "Selected file:" << filePath;
         if (!filePath.isEmpty())
         {
             selectedFilePath = filePath;
-            // 重新创建线程和 worker
+            // 创建新的线程和 worker
             demuxThread = new QThread;
             demuxWorker = new DemuxWorker;
             demuxWorker->moveToThread(demuxThread);
-            setupConnections();  // 重新建立连接
+            setupConnections();  // 仅建立信号连接
 
             qDebug() << "重新建立连接";
-
+            
             emit sigSetFilePath(selectedFilePath);
-            // 自动启动播放
             startPlay();
 
-            // 启用并设置 playButton 文本为 "Pause"
             playButton->setEnabled(true);
             playButton->setText("Pause");
 
-            // 更新窗口标题
             setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
         }
     });
@@ -156,15 +152,12 @@ void MediaWindow::stopPlay()
     if (demuxWorker) {
         // 停止播放视频
         demuxWorker->isPlay = false;
+        demuxThread->requestInterruption();
         demuxThread->quit();
         demuxThread->wait();
     }
-    freeSdl();
-    sdlInitialized = false;
-
     // 将视频区域恢复为黑色（重置背景）
     videoLabel->setStyleSheet("background-color: black;");
-
     // 恢复按钮状态
     playButton->setEnabled(true);
     playButton->setText("Play");
@@ -180,57 +173,12 @@ void MediaWindow::stopPlay()
     }
 }
 
-int MediaWindow::initSdl(int mWidth,int mHeight)
+int MediaWindow::initVideoDisplay(int mWidth,int mHeight)
 {
     videoWidth = mWidth;
     videoHeight = mHeight;
+    qDebug() << "initSdl: videoWidth =" << videoWidth << ", videoHeight =" << videoHeight;
 
-    // 设置主窗口初始大小
-    this->resize(1280, 720);
-
-    // 初始化 SDL
-    if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
-    {
-        qDebug() << "SDL_Init failed";
-        return -1;
-    }
-
-    // 创建窗体
-    sdlWindow = SDL_CreateWindowFrom((void *)videoLabel->winId());
-    if (sdlWindow == nullptr)
-    {
-        qDebug() << "SDL_CreateWindowFrom failed";
-        return -1;
-    }
-
-    // 从窗体创建渲染器
-    sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-
-    // 创建渲染器纹理
-    sdlTexture = SDL_CreateTexture(sdlRenderer, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, mWidth, mHeight);
-
-    SDL_RenderSetLogicalSize(sdlRenderer, mWidth, mHeight);
-
-    sdlInitialized = true;
-
-    return 0;
-}
-
-int MediaWindow::freeSdl()
-{
-    if (sdlInitialized)
-    {
-        if (sdlRenderer) SDL_DestroyRenderer(sdlRenderer);
-        if (sdlTexture) SDL_DestroyTexture(sdlTexture);
-#ifndef Q_OS_MAC
-        if (sdlWindow) SDL_DestroyWindow(sdlWindow);
-#endif
-        sdlRenderer = nullptr;
-        sdlTexture = nullptr;
-        sdlWindow = nullptr;
-        SDL_Quit();
-        sdlInitialized = false;
-    }
     return 0;
 }
 
@@ -242,6 +190,7 @@ void MediaWindow::setupUI()
 
     // 创建三大区域 Frame
     videoFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    videoFrame->setAttribute(Qt::WA_NativeWindow);
     controlFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Fixed);
     rightFrame = createFrame(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
@@ -249,7 +198,7 @@ void MediaWindow::setupUI()
     videoLabel = new QLabel();
     videoLabel->setAttribute(Qt::WA_NativeWindow);
     videoLabel->setAlignment(Qt::AlignCenter);
-    videoLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    videoLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     videoLabel->setStyleSheet("background-color: black;");
 
     QVBoxLayout *videoLayout = new QVBoxLayout(videoFrame);
@@ -284,11 +233,10 @@ void MediaWindow::setupUI()
 void MediaWindow::setupConnections()
 {
     connect(demuxThread, &QThread::finished, demuxWorker, &QObject::deleteLater);
-    connect(demuxWorker, &DemuxWorker::sigGetVideoInfo, this, &MediaWindow::initSdl);
+    connect(demuxWorker, &DemuxWorker::sigGetVideoInfo, this, &MediaWindow::initVideoDisplay);
     connect(demuxWorker, &DemuxWorker::sigGetFrame, this, &MediaWindow::updateVideo);
     connect(this, &MediaWindow::sigStartPlay, demuxWorker, &DemuxWorker::slotDoWork);
     connect(this, &MediaWindow::sigSetFilePath, demuxWorker, &DemuxWorker::setFilePath);
-
 }
 
 void MediaWindow::setupControlPanel()
@@ -366,23 +314,54 @@ QPushButton *MediaWindow::createButton(const QString &text)
 
 void MediaWindow::updateVideo(AVFrame *pFrame)
 {
-    if (sdlInitialized && sdlTexture && sdlRenderer)
-    {
-        // Update texture with new frame data
-        SDL_UpdateYUVTexture(sdlTexture, NULL,
-                             pFrame->data[0], pFrame->linesize[0],
-                             pFrame->data[1], pFrame->linesize[1],
-                             pFrame->data[2], pFrame->linesize[2]);
-
-        // 清除背景
-        SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
-        SDL_RenderClear(sdlRenderer);
-
-        // 让 SDL 按“逻辑分辨率”自动缩放到整个窗口
-        SDL_RenderCopy(sdlRenderer, sdlTexture, nullptr, nullptr);
-        SDL_RenderPresent(sdlRenderer);
+    if (!pFrame) {
+        return;
+    }
+    // 创建目标 RGB 帧
+    AVFrame* pFrameRGB = av_frame_alloc();
+    if (!pFrameRGB) {
+        qDebug() << "无法分配 pFrameRGB";
+        av_frame_free(&pFrame);
+        return;
     }
 
-    // 释放帧
+    int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB24, videoWidth, videoHeight, 1);
+    uint8_t* buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t));
+    av_image_fill_arrays(pFrameRGB->data, pFrameRGB->linesize, buffer, AV_PIX_FMT_RGB24, videoWidth, videoHeight, 1);
+
+    // 创建转换上下文
+    struct SwsContext* sws_ctx = sws_getContext(
+        videoWidth, videoHeight, (AVPixelFormat)pFrame->format,
+        videoWidth, videoHeight, AV_PIX_FMT_RGB24,
+        SWS_BILINEAR, nullptr, nullptr, nullptr);
+    if (!sws_ctx) {
+        qDebug() << "无法创建 sws 上下文";
+        av_free(buffer);
+        av_frame_free(&pFrameRGB);
+        av_frame_free(&pFrame);
+        return;
+    }
+
+    // 转换
+    sws_scale(sws_ctx, pFrame->data, pFrame->linesize, 0, videoHeight,
+              pFrameRGB->data, pFrameRGB->linesize);
+
+    // 创建 QImage
+    QImage image(pFrameRGB->data[0], videoWidth, videoHeight, pFrameRGB->linesize[0], QImage::Format_RGB888);
+    QImage imageCopy = image.copy();
+
+    // 根据 videoLabel 的大小，等比例缩放图像
+    QSize labelSize = videoLabel->size();
+    QImage scaledImage = imageCopy.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    // 在 GUI 线程中更新 videoLabel
+    QMetaObject::invokeMethod(videoLabel, [=]() {
+            videoLabel->setPixmap(QPixmap::fromImage(scaledImage));
+        }, Qt::QueuedConnection);
+
+    // 清理
+    sws_freeContext(sws_ctx);
+    av_free(buffer);
+    av_frame_free(&pFrameRGB);
     av_frame_free(&pFrame);
 }
