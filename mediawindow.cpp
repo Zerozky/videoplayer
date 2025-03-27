@@ -23,11 +23,6 @@ MediaWindow::MediaWindow(QWidget *parent) :
     QWidget(parent)
 {
     setupUI();
-
-    // demuxThread = new QThread;
-    // demuxWorker = new DemuxWorker;
-    // demuxWorker->moveToThread(demuxThread);
-
     setupConnections();
 
     // 按钮连接
