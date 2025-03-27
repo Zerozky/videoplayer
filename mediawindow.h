@@ -24,68 +24,14 @@ extern "C"
 #include <SDL2/SDL_rect.h>
 }
 
+class DemuxWorker;
+
 class MediaWindow : public QWidget
 {
     Q_OBJECT
 public:
     explicit MediaWindow(QWidget *parent = nullptr);
     ~MediaWindow() ;
-
-protected:
-    void resizeEvent(QResizeEvent *event) override;
-
-private:
-    // Main layout components
-    QSplitter *mainSplitter;      // Main horizontal splitter
-    QSplitter *leftSplitter;      // Left vertical splitter
-    QFrame *videoFrame;           // Left top frame for video
-    QFrame *controlFrame;         // Left bottom frame for controls
-    QFrame *rightFrame;           // Right frame (播放列表)
-
-    // Video components
-    QLabel *videoLabel;           // Widget to attach SDL renderer
-
-    // Control components
-    QPushButton *stopButton;
-    QPushButton *openButton;
-
-    QSlider *progressSlider;
-    QSlider *volumeSlider;
-    QPushButton *playButton;      // 播放/暂停按钮
-    QPushButton *rewindButton;    // 快退
-    QPushButton *forwardButton;   // 快进
-    QLabel *timeInfoLabel;        // 视频当前时间 / 总时长
-    QLabel *codecInfoLabel;       // 音视频编码器信息
-    QPushButton *toggleControlPanelButton; // 打开/隐藏控制面板
-    QPushButton *togglePlaylistButton;     // 打开/关闭播放列表
-
-    // Thread components
-    QThread *demuxThread;
-    DemuxWorker *demuxWorker;
-
-    // SDL components
-    SDL_Renderer *sdlRenderer;
-    SDL_Texture *sdlTexture;
-    SDL_Window *sdlWindow;
-    int videoWidth;
-    int videoHeight;
-    bool sdlInitialized;
-
-    QString selectedFilePath;
-
-    int freeSdl();
-
-    void setupUI();
-    void setupConnections();
-    void setupControlPanel();
-
-    // 辅助函数：创建 Frame
-    QFrame* createFrame(QSizePolicy::Policy hPolicy, QSizePolicy::Policy vPolicy);
-    // 辅助函数：创建 Slider
-    QSlider* createSlider(int min, int max, int value);
-    // 辅助函数：创建 Button
-    QPushButton* createButton(const QString& text);
-
 
 signals:
     void sigStartPlay();
@@ -96,8 +42,52 @@ public slots:
     void stopPlay();
     void openFile();
     void togglePlayPause();
-    void updateVideo(AVFrame *pFrame);
-    int initSdl(int mWidth,int mHeight);
+    void updateVideo(class AVFrame *pFrame);
+    int initVideoDisplay(int mWidth,int mHeight);
+
+private:
+    // UI 部分
+    QSplitter *mainSplitter;      // Main horizontal splitter
+    QSplitter *leftSplitter;      // Left vertical splitter
+
+    QFrame *videoFrame;           // Left top frame for video
+    QFrame *controlFrame;         // Left bottom frame for controls
+    QFrame *rightFrame;           // Right frame (播放列表)
+
+    QLabel *videoLabel;           // Widget to attach SDL renderer
+
+    QSlider *progressSlider;
+    QSlider *volumeSlider;
+
+    QPushButton *stopButton;
+    QPushButton *openButton;
+    QPushButton *playButton;      // 播放/暂停按钮
+    QPushButton *rewindButton;    // 快退
+    QPushButton *forwardButton;   // 快进
+
+    QLabel *timeInfoLabel;        // 视频当前时间 / 总时长
+    QLabel *codecInfoLabel;       // 音视频编码器信息
+
+    QPushButton *toggleControlPanelButton; // 打开/隐藏控制面板
+    QPushButton *togglePlaylistButton;     // 打开/关闭播放列表
+
+    void setupUI();
+    void setupControlPanel();
+    QFrame* createFrame(QSizePolicy::Policy hPolicy, QSizePolicy::Policy vPolicy);
+    QSlider* createSlider(int min, int max, int value);
+    QPushButton* createButton(const QString& text);
+    void setupConnections();    // 线程信号连接
+
+
+    // 播放线程和解码器对象
+    QThread *demuxThread = nullptr;
+    DemuxWorker *demuxWorker = nullptr;
+    QString selectedFilePath;
+
+    // QImage 渲染方案时保存视频原始宽高
+    int videoWidth = 0;
+    int videoHeight = 0;
+
 };
 
 #endif // MEDIAWINDOW_H
