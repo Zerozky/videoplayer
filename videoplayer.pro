@@ -42,4 +42,5 @@ macx {
     LIBS += -L/opt/homebrew/lib -lswresample -lavformat -lswscale -lavutil  -lavcodec  -lavdevice -lavfilter
     LIBS += -L/opt/homebrew/lib -lSDL2 -lSDL2main
     LIBS += -lpthread
+    LIBS += -framework VideoToolbox -framework CoreMedia -framework CoreVideo
 }

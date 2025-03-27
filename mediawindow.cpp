@@ -46,44 +46,48 @@ MediaWindow::~MediaWindow()
         demuxThread->quit();
         demuxThread->wait();
     }
-    if(demuxThread)
-        demuxThread->deleteLater();
-    if(demuxWorker)
-        demuxWorker->deleteLater();
+    if(demuxThread) {
+        delete demuxThread;
+        demuxThread = nullptr;
+    }
+    if(demuxWorker) {
+        delete demuxWorker;
+        demuxWorker = nullptr;
+    }
 }
 
 void MediaWindow::openFile()
 {
-    // 如果之前已有 demuxThread 或 demuxWorker（不论是否正在运行），先清理干净
+    // 如果线程处于暂停状态，先唤醒
     if (demuxWorker) {
-        // 如果线程正处于暂停状态，先唤醒它
-        demuxWorker->pauseMutex.lock();
+        QMutexLocker locker(&demuxWorker->pauseMutex);
         demuxWorker->isPause = false;
         demuxWorker->pauseCondition.wakeAll();
-        demuxWorker->pauseMutex.unlock();
-        qDebug() << "demuxWorker 如果线程正处于暂停状态，先唤醒它";
     }
+    // 如果已有线程，先停止播放并清理
     if (demuxThread) {
-        if(demuxWorker)
-            demuxWorker->isPlay = false;  // 通知停止
+        if (demuxWorker)
+            demuxWorker->isPlay = false;
+        demuxThread->requestInterruption();
         demuxThread->quit();
         demuxThread->wait();
-        demuxThread->deleteLater();
+        delete demuxThread;
         demuxThread = nullptr;
-        qDebug() << "demuxThread clear";
-
+        qDebug() << "demuxThread cleared";
     }
-    if (demuxWorker)
-    {
-        demuxWorker->deleteLater();
+    if (demuxWorker) {
+        delete demuxWorker;
         demuxWorker = nullptr;
-        qDebug() << "demuxWorker clear";
+        qDebug() << "demuxWorker cleared";
     }
+
+    // 处理完清理后，确保事件处理完毕
+    QCoreApplication::processEvents();
 
     // 使用延时调用，确保旧资源已清理完毕
     QTimer::singleShot(100, this, [this]() {
         QString filePath = QFileDialog::getOpenFileName(
-            nullptr,
+            this,
             tr("Open Video File"),
             QString(),
             tr("Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*.*)"),
@@ -100,7 +104,6 @@ void MediaWindow::openFile()
             demuxWorker = new DemuxWorker;
             demuxWorker->moveToThread(demuxThread);
             setupConnections();  // 仅建立信号连接
-
             qDebug() << "重新建立连接";
             
             emit sigSetFilePath(selectedFilePath);
@@ -150,26 +153,31 @@ void MediaWindow::startPlay()
 void MediaWindow::stopPlay()
 {
     if (demuxWorker) {
-        // 停止播放视频
+        // 通知 worker 停止播放
         demuxWorker->isPlay = false;
-        demuxThread->requestInterruption();
-        demuxThread->quit();
-        demuxThread->wait();
+        // 请求线程中断并结束事件循环
+        if (demuxThread) {
+            demuxThread->requestInterruption();
+            demuxThread->quit();
+            demuxThread->wait();
+        }
     }
-    // 将视频区域恢复为黑色（重置背景）
+    // 恢复视频区域显示
     videoLabel->setStyleSheet("background-color: black;");
     // 恢复按钮状态
     playButton->setEnabled(true);
     playButton->setText("Play");
 
     // 删除线程和 worker，并置空
-    if(demuxThread) {
-        demuxThread->deleteLater();
+    if (demuxThread) {
+        delete demuxThread;
         demuxThread = nullptr;
+        qDebug() << "demuxThread cleared";
     }
-    if(demuxWorker) {
-        demuxWorker->deleteLater();
+    if (demuxWorker) {
+        delete demuxWorker;
         demuxWorker = nullptr;
+        qDebug() << "demuxWorker cleared";
     }
 }
 
@@ -199,6 +207,7 @@ void MediaWindow::setupUI()
     videoLabel->setAttribute(Qt::WA_NativeWindow);
     videoLabel->setAlignment(Qt::AlignCenter);
     videoLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    // videoLabel->setScaledContents(true);
     videoLabel->setStyleSheet("background-color: black;");
 
     QVBoxLayout *videoLayout = new QVBoxLayout(videoFrame);
@@ -232,7 +241,6 @@ void MediaWindow::setupUI()
 
 void MediaWindow::setupConnections()
 {
-    connect(demuxThread, &QThread::finished, demuxWorker, &QObject::deleteLater);
     connect(demuxWorker, &DemuxWorker::sigGetVideoInfo, this, &MediaWindow::initVideoDisplay);
     connect(demuxWorker, &DemuxWorker::sigGetFrame, this, &MediaWindow::updateVideo);
     connect(this, &MediaWindow::sigStartPlay, demuxWorker, &DemuxWorker::slotDoWork);
