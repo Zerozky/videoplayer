@@ -14,6 +14,7 @@
 #include <QDebug>
 #include <QWindow>
 #include <QImage>
+#include <atomic>
 extern "C" {
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
@@ -317,9 +318,25 @@ QPushButton *MediaWindow::createButton(const QString &text)
 
 void MediaWindow::updateVideo(AVFrame *pFrame)
 {
+    // 用于控制是否已有一个待处理的UI更新请求
+    // static std::atomic<bool> updatePending(false);
+
     if (!pFrame) {
         return;
     }
+
+    // 如果前一次更新还未处理完，则直接丢弃当前帧，防止事件堆积
+    // if (updatePending.load()) {
+    //     qDebug() << "帧丢弃" << pFrame->pts;
+    //     av_frame_free(&pFrame);
+    //     return;
+    // }
+
+    // 根据 videoLabel 的当前尺寸确定目标输出尺寸
+    QSize targetSize = videoLabel->size();
+    int dstW = targetSize.width();
+    int dstH = targetSize.height();
+
     // 创建目标 RGB 帧
     AVFrame* pFrameRGB = av_frame_alloc();
     if (!pFrameRGB) {
@@ -357,14 +374,19 @@ void MediaWindow::updateVideo(AVFrame *pFrame)
     QSize labelSize = videoLabel->size();
     QImage scaledImage = imageCopy.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-    // 在 GUI 线程中更新 videoLabel
-    QMetaObject::invokeMethod(videoLabel, [=]() {
-            videoLabel->setPixmap(QPixmap::fromImage(scaledImage));
-        }, Qt::QueuedConnection);
-
-    // 清理
+    // 清理转换资源
     sws_freeContext(sws_ctx);
     av_free(buffer);
     av_frame_free(&pFrameRGB);
     av_frame_free(&pFrame);
+
+    // 设置标志，表示有一个UI更新任务正在排队
+    updatePending.store(true);
+
+    // 在 GUI 线程中更新 videoLabel
+    QMetaObject::invokeMethod(videoLabel, [=]() {
+            videoLabel->setPixmap(QPixmap::fromImage(scaledImage));
+            // 更新完毕后重置标志
+            updatePending.store(false);
+        }, Qt::QueuedConnection);
 }
