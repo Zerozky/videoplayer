@@ -11,6 +11,9 @@
 #include <QFileDialog>
 #include <QSlider>
 #include "demuxworker.h"
+#ifdef Q_OS_WIN
+#include "cudavideowindow.h"
+#endif
 extern "C"
 {
 #include <libavcodec/avcodec.h>
@@ -18,10 +21,10 @@ extern "C"
 #include <libswscale/swscale.h>
 #include <libavutil/time.h>
 #include <libswresample/swresample.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_video.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_rect.h>
+// #include <SDL2/SDL.h>
+// #include <SDL2/SDL_video.h>
+// #include <SDL2/SDL_render.h>
+// #include <SDL2/SDL_rect.h>
 }
 
 class DemuxWorker;
@@ -42,7 +45,11 @@ public slots:
     void stopPlay();
     void openFile();
     void togglePlayPause();
-    void updateVideo(class AVFrame *pFrame);
+#ifdef Q_OS_WIN
+    void updateCudaVideo(AVFrame *pFrame);
+#else
+    void updateVideo(AVFrame *pFrame);
+#endif
     int initVideoDisplay(int mWidth,int mHeight);
 
 private:
@@ -54,7 +61,11 @@ private:
     QFrame *controlFrame;         // Left bottom frame for controls
     QFrame *rightFrame;           // Right frame (播放列表)
 
-    QLabel *videoLabel;           // Widget to attach SDL renderer
+#ifdef Q_OS_WIN
+    CudaVideoWindow *cudaVideoWindow; // 用于 CUDA 渲染
+#else
+    QLabel *videoLabel; // 其他平台使用 QLabel
+#endif
 
     QSlider *progressSlider;
     QSlider *volumeSlider;
@@ -88,6 +99,13 @@ private:
     int videoWidth = 0;
     int videoHeight = 0;
 
+#ifdef Q_OS_WIN
+    // 在 MediaWindow 类中增加成员变量
+    SwsContext *m_sws_ctx = nullptr;
+    uint8_t *m_conversionBuffer = nullptr;
+    int m_conversionBufferSize = 0;
+    AVFrame *m_frameRGBA = nullptr;
+#endif
 };
 
 #endif // MEDIAWINDOW_H

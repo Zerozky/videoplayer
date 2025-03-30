@@ -15,8 +15,10 @@
 #include <QWindow>
 #include <QImage>
 extern "C" {
-#include <libavutil/imgutils.h>
+#ifdef Q_OS_WIN
 #include <libswscale/swscale.h>
+#include <libavutil/imgutils.h>
+#endif
 }
 
 MediaWindow::MediaWindow(QWidget *parent) :
@@ -53,8 +55,9 @@ MediaWindow::~MediaWindow()
 
 void MediaWindow::openFile()
 {
-    // 如果线程处于暂停状态，先唤醒
+    // 如果线程处于暂停状态，先断开并唤醒
     if (demuxWorker) {
+        disconnect(demuxWorker, nullptr, this, nullptr);
         QMutexLocker locker(&demuxWorker->pauseMutex);
         demuxWorker->isPause = false;
         demuxWorker->pauseCondition.wakeAll();
@@ -66,15 +69,32 @@ void MediaWindow::openFile()
         demuxThread->requestInterruption();
         demuxThread->quit();
         demuxThread->wait();
-        delete demuxThread;
+        demuxThread->deleteLater();
         demuxThread = nullptr;
         qDebug() << "demuxThread cleared";
     }
     if (demuxWorker) {
-        delete demuxWorker;
+        demuxWorker->deleteLater();
         demuxWorker = nullptr;
         qDebug() << "demuxWorker cleared";
     }
+
+#ifdef Q_OS_WIN
+    // 释放转换资源
+    if (m_sws_ctx) {
+        sws_freeContext(m_sws_ctx);
+        m_sws_ctx = nullptr;
+    }
+    if (m_conversionBuffer) {
+        cudaFreeHost(m_conversionBuffer);
+        m_conversionBuffer = nullptr;
+        m_conversionBufferSize = 0;
+    }
+    if (m_frameRGBA) {
+        av_frame_free(&m_frameRGBA);
+        m_frameRGBA = nullptr;
+    }
+#endif
 
     // 处理完清理后，确保事件处理完毕
     QCoreApplication::processEvents();
@@ -147,6 +167,10 @@ void MediaWindow::startPlay()
 
 void MediaWindow::stopPlay()
 {
+    // 断开与 demuxWorker 的所有信号连接，避免 pending 调用执行
+    if(demuxWorker)
+        disconnect(demuxWorker, nullptr, this, nullptr);
+
     if (demuxWorker) {
         // 通知 worker 停止播放
         demuxWorker->isPlay = false;
@@ -158,29 +182,54 @@ void MediaWindow::stopPlay()
         }
     }
     // 恢复视频区域显示
-    videoLabel->setStyleSheet("background-color: black;");
+#ifdef Q_OS_WIN
+    // Windows 下使用 CudaVideoWidget 清屏
+    if (cudaVideoWindow)
+        cudaVideoWindow->clearScreen();
+#else
+    // 其他平台使用原来的 QLabel 清空背景
+    if (videoLabel)
+        videoLabel->setStyleSheet("background-color: black;");
+#endif
     // 恢复按钮状态
     playButton->setEnabled(true);
     playButton->setText("Play");
 
-    // 删除线程和 worker，并置空
+    // 安全删除线程和 worker，使用 deleteLater() 避免同步删除引发 pending 调用问题
     if (demuxThread) {
-        delete demuxThread;
+        demuxThread->deleteLater();
         demuxThread = nullptr;
         qDebug() << "demuxThread cleared";
     }
     if (demuxWorker) {
-        delete demuxWorker;
+        demuxWorker->deleteLater();
         demuxWorker = nullptr;
         qDebug() << "demuxWorker cleared";
     }
+
+#ifdef Q_OS_WIN
+    // 释放转换相关资源
+    if (m_sws_ctx) {
+        sws_freeContext(m_sws_ctx);
+        m_sws_ctx = nullptr;
+    }
+    if (m_conversionBuffer) {
+        cudaFreeHost(m_conversionBuffer);
+        m_conversionBuffer = nullptr;
+        m_conversionBufferSize = 0;
+    }
+    if (m_frameRGBA) {
+        av_frame_free(&m_frameRGBA);
+        m_frameRGBA = nullptr;
+    }
+#endif
 }
 
 int MediaWindow::initVideoDisplay(int mWidth,int mHeight)
 {
     videoWidth = mWidth;
     videoHeight = mHeight;
-    qDebug() << "initSdl: videoWidth =" << videoWidth << ", videoHeight =" << videoHeight;
+    qDebug() << "initVideoDisplay: videoWidth =" << videoWidth << ", videoHeight =" << videoHeight;
 
     return 0;
 }
@@ -198,16 +247,29 @@ void MediaWindow::setupUI()
     rightFrame = createFrame(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     // 视频显示区域
+#ifdef Q_OS_WIN
+    // 创建 CudaVideoWindow，并通过 createWindowContainer 嵌入到 QWidget 布局中
+    cudaVideoWindow = new CudaVideoWindow();
+    QWidget *videoContainer = QWidget::createWindowContainer(cudaVideoWindow, this);
+    videoContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    QVBoxLayout *videoLayout = new QVBoxLayout;
+    videoLayout->setContentsMargins(0,0,0,0);
+    videoLayout->addWidget(videoContainer);
+    // 使用一个容器 Frame 存放 cudaVideoWidget
+    videoFrame = new QFrame();
+    videoFrame->setLayout(videoLayout);
+#else
     videoLabel = new QLabel();
     videoLabel->setAttribute(Qt::WA_NativeWindow);
     videoLabel->setAlignment(Qt::AlignCenter);
     videoLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-    // videoLabel->setScaledContents(true);
     videoLabel->setStyleSheet("background-color: black;");
-
-    QVBoxLayout *videoLayout = new QVBoxLayout(videoFrame);
+    QVBoxLayout *videoLayout = new QVBoxLayout;
     videoLayout->setContentsMargins(0, 0, 0, 0);
     videoLayout->addWidget(videoLabel);
+    videoFrame = new QFrame();
+    videoFrame->setLayout(videoLayout);
+#endif
 
     //控制面板
     setupControlPanel();
@@ -237,7 +299,11 @@ void MediaWindow::setupUI()
 void MediaWindow::setupConnections()
 {
     connect(demuxWorker, &DemuxWorker::sigGetVideoInfo, this, &MediaWindow::initVideoDisplay);
+#ifdef Q_OS_WIN
+    connect(demuxWorker, &DemuxWorker::sigGetFrame, this, &MediaWindow::updateCudaVideo);
+#else
     connect(demuxWorker, &DemuxWorker::sigGetFrame, this, &MediaWindow::updateVideo);
+#endif
     connect(this, &MediaWindow::sigStartPlay, demuxWorker, &DemuxWorker::slotDoWork);
     connect(this, &MediaWindow::sigSetFilePath, demuxWorker, &DemuxWorker::setFilePath);
 }
@@ -315,56 +381,138 @@ QPushButton *MediaWindow::createButton(const QString &text)
     return new QPushButton(text);
 }
 
+#ifdef Q_OS_WIN
+void MediaWindow::updateCudaVideo(AVFrame *pFrame)
+{
+    if (!pFrame)
+        return;
+
+    // 使用原始视频的宽高
+    int dstW = videoWidth;
+    int dstH = videoHeight;
+
+    // 初始化或复用 sws 上下文
+    if (!m_sws_ctx) {
+        m_sws_ctx = sws_getCachedContext(nullptr,
+                                         videoWidth, videoHeight, (AVPixelFormat)pFrame->format,
+                                         dstW, dstH, AV_PIX_FMT_RGBA,
+                                         SWS_BILINEAR, nullptr, nullptr, nullptr);
+        if (!m_sws_ctx) {
+            qDebug() << "无法创建 sws 上下文";
+            av_frame_free(&pFrame);
+            return;
+        }
+    }
+
+    // 计算转换缓冲区所需大小，并分配/复用页锁定内存
+    int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGBA, dstW, dstH, 1);
+    if (numBytes != m_conversionBufferSize) {
+        if (m_conversionBuffer) {
+            cudaFreeHost(m_conversionBuffer);
+            m_conversionBuffer = nullptr;
+        }
+        cudaError_t err = cudaHostAlloc((void**)&m_conversionBuffer, numBytes, cudaHostAllocDefault);
+        if (err != cudaSuccess) {
+            qDebug() << "cudaHostAlloc failed:" << cudaGetErrorString(err);
+            av_frame_free(&pFrame);
+            return;
+        }
+        m_conversionBufferSize = numBytes;
+    }
+
+    // 分配或复用 pFrameRGBA 用于存储转换结果
+    if (!m_frameRGBA) {
+        m_frameRGBA = av_frame_alloc();
+        if (!m_frameRGBA) {
+            qDebug() << "无法分配 m_frameRGBA";
+            av_frame_free(&pFrame);
+            return;
+        }
+    }
+    av_image_fill_arrays(m_frameRGBA->data, m_frameRGBA->linesize,
+                         m_conversionBuffer, AV_PIX_FMT_RGBA, dstW, dstH, 1);
+
+    // 进行颜色空间转换
+    sws_scale(m_sws_ctx,
+              pFrame->data, pFrame->linesize, 0, videoHeight,
+              m_frameRGBA->data, m_frameRGBA->linesize);
+
+    // 更新 CUDA 纹理
+    cudaVideoWindow->updateFrame(m_frameRGBA->data[0], dstW, dstH);
+
+    // 释放输入帧，不释放转换缓冲区与 pFrameRGBA，以便下次复用
+    av_frame_free(&pFrame);
+}
+#else
 void MediaWindow::updateVideo(AVFrame *pFrame)
 {
     if (!pFrame) {
         return;
     }
-    // 创建目标 RGB 帧
-    AVFrame* pFrameRGB = av_frame_alloc();
-    if (!pFrameRGB) {
-        qDebug() << "无法分配 pFrameRGB";
-        av_frame_free(&pFrame);
-        return;
+
+    // 获取 videoLabel 的当前尺寸
+    QSize labelSize = videoLabel->size();
+
+    // 根据原始视频尺寸（videoWidth, videoHeight）计算目标尺寸，保持原比例
+    double videoAspect = static_cast<double>(videoWidth) / videoHeight;
+    int targetW = labelSize.width();
+    int targetH = labelSize.height();
+    double labelAspect = static_cast<double>(targetW) / targetH;
+    if (videoAspect > labelAspect) {
+        // 视频更宽，则以 label 宽度为基准
+        targetH = static_cast<int>(targetW / videoAspect);
+    } else {
+        // 视频更高，则以 label 高度为基准
+        targetW = static_cast<int>(targetH * videoAspect);
     }
 
-    int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB24, videoWidth, videoHeight, 1);
-    uint8_t* buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t));
-    av_image_fill_arrays(pFrameRGB->data, pFrameRGB->linesize, buffer, AV_PIX_FMT_RGB24, videoWidth, videoHeight, 1);
-
-    // 创建转换上下文
-    struct SwsContext* sws_ctx = sws_getContext(
-        videoWidth, videoHeight, (AVPixelFormat)pFrame->format,
-        videoWidth, videoHeight, AV_PIX_FMT_RGB24,
-        SWS_BILINEAR, nullptr, nullptr, nullptr);
+    // 使用 sws_getCachedContext 来复用转换上下文
+    // 原始尺寸 videoWidth x videoHeight，目标尺寸为 targetW x targetH，转换格式固定为 RGB24
+    static SwsContext *sws_ctx = nullptr;
+    sws_ctx = sws_getCachedContext(sws_ctx,
+                                   videoWidth, videoHeight, (AVPixelFormat)pFrame->format,
+                                   targetW, targetH, AV_PIX_FMT_RGB24,
+                                   SWS_BILINEAR, nullptr, nullptr, nullptr);
     if (!sws_ctx) {
         qDebug() << "无法创建 sws 上下文";
-        av_free(buffer);
-        av_frame_free(&pFrameRGB);
         av_frame_free(&pFrame);
         return;
     }
 
-    // 转换
+    // 为目标 RGB 帧分配内存（尺寸为目标显示尺寸）
+    int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB24, targetW, targetH, 1);
+    uint8_t* buffer = (uint8_t*)av_malloc(numBytes);
+    if (!buffer) {
+        qDebug() << "无法分配转换缓冲区";
+        av_frame_free(&pFrame);
+        return;
+    }
+    // 创建目标 RGB 帧
+    AVFrame *pFrameRGB = av_frame_alloc();
+    if (!pFrameRGB) {
+        qDebug() << "无法分配 pFrameRGB";
+        av_free(buffer);
+        av_frame_free(&pFrame);
+        return;
+    }
+    av_image_fill_arrays(pFrameRGB->data, pFrameRGB->linesize, buffer, AV_PIX_FMT_RGB24, targetW, targetH, 1);
+
+    // 进行颜色空间转换，同时直接缩放到目标尺寸
     sws_scale(sws_ctx, pFrame->data, pFrame->linesize, 0, videoHeight,
               pFrameRGB->data, pFrameRGB->linesize);
 
     // 创建 QImage
-    QImage image(pFrameRGB->data[0], videoWidth, videoHeight, pFrameRGB->linesize[0], QImage::Format_RGB888);
+    QImage image(pFrameRGB->data[0], targetW, targetH, pFrameRGB->linesize[0], QImage::Format_RGB888);
     QImage imageCopy = image.copy();
 
-    // 根据 videoLabel 的大小，等比例缩放图像
-    QSize labelSize = videoLabel->size();
-    QImage scaledImage = imageCopy.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-    // 在 GUI 线程中更新 videoLabel
-    QMetaObject::invokeMethod(videoLabel, [=]() {
-            videoLabel->setPixmap(QPixmap::fromImage(scaledImage));
-        }, Qt::QueuedConnection);
-
-    // 清理
-    sws_freeContext(sws_ctx);
+    // 释放转换过程分配的资源
     av_free(buffer);
     av_frame_free(&pFrameRGB);
     av_frame_free(&pFrame);
+
+    // 在 GUI 线程中更新 videoLabel
+    QMetaObject::invokeMethod(videoLabel, [=]() {
+            videoLabel->setPixmap(QPixmap::fromImage(imageCopy));
+        }, Qt::QueuedConnection);
 }
+#endif
