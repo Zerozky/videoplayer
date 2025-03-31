@@ -21,6 +21,7 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 extern "C" {
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
@@ -338,10 +339,67 @@ void MediaWindow::onDeepSeekButtonClicked()
         deepSeekResultText->setText("请输入查询内容。");
         return;
     }
-    // 假设 deepseekSearch(query) 是你已有的 DeepSeek API 函数，返回 QString 结果
-    // 这里用模拟结果
-    QString result = "Simulated DeepSeek result for query: " + query;
-    deepSeekResultText->setText(result);
+
+    // 构造 DeepSeek API 请求（根据 API 文档，调整 URL 和参数）
+    QUrl url("https://api.deepseek.com/chat/completions");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    // 添加授权头部，替换为你的实际 API Key
+    request.setRawHeader("Authorization", "Bearer sk-350bb32b02434688add2b505e5eb5eb0");
+
+    // 构造 JSON 请求体
+    // 系统消息
+    QJsonObject systemMessage;
+    systemMessage["role"] = "system";
+    systemMessage["content"] = "You are a helpful assistant.";
+    // 用户消息
+    QJsonObject userMessage;
+    userMessage["role"] = "user";
+    userMessage["content"] = query;
+
+    QJsonArray messages;
+    messages.append(systemMessage);
+    messages.append(userMessage);
+
+    QJsonObject json;
+    json["model"] = "deepseek-chat";
+    json["messages"] = messages;
+    json["stream"] = false; // 不使用流式返回
+
+    QJsonDocument doc(json);
+    QByteArray postData = doc.toJson();
+
+    // 创建网络管理器并发起 POST 请求
+    QNetworkAccessManager *manager = new QNetworkAccessManager(this);
+    QNetworkReply *reply = manager->post(request, postData);
+
+    // 当请求完成后解析响应
+    connect(reply, &QNetworkReply::finished, [=](){
+        if(reply->error() == QNetworkReply::NoError) {
+            QByteArray response = reply->readAll();
+            QJsonDocument responseDoc = QJsonDocument::fromJson(response);
+            QJsonObject responseObj = responseDoc.object();
+            QString answer;
+            if(responseObj.contains("choices")){
+                QJsonArray choices = responseObj.value("choices").toArray();
+                if(!choices.isEmpty()){
+                    QJsonObject firstChoice = choices.first().toObject();
+                    if(firstChoice.contains("message")){
+                        QJsonObject messageObj = firstChoice.value("message").toObject();
+                        answer = messageObj.value("content").toString();
+                    }
+                }
+            }
+            if(answer.isEmpty()){
+                answer = "未返回答案，请检查查询参数或 API 状态。";
+            }
+            deepSeekResultText->setText(answer);
+        } else {
+            deepSeekResultText->setText("请求失败: " + reply->errorString());
+        }
+        reply->deleteLater();
+        manager->deleteLater();
+    });
 }
 
 void MediaWindow::updateVideoList()
