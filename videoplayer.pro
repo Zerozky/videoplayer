@@ -11,22 +11,17 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
-    cudavideowidget.cpp \
     cudavideowindow.cpp \
     demuxworker.cpp \
     main.cpp \
-    mainwindow.cpp \
     mediawindow.cpp
 
 HEADERS += \
-    cudavideowidget.h \
     cudavideowindow.h \
     demuxworker.h \
-    mainwindow.h \
     mediawindow.h
 
-FORMS += \
-    mainwindow.ui
+FORMS +=
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
