@@ -15,10 +15,8 @@
 #include <QWindow>
 #include <QImage>
 extern "C" {
-#ifdef Q_OS_WIN
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
-#endif
 }
 
 MediaWindow::MediaWindow(QWidget *parent) :

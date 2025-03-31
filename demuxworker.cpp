@@ -67,16 +67,6 @@ void DemuxWorker::setFilePath(const QString &path)
     qDebug() << "File path set to:" << filePath;
 }
 
-void mSleep(int msec)
-{
-    QTime n = QTime::currentTime();
-    QTime now;
-    do
-    {
-        now=QTime::currentTime();
-    } while(n.msecsTo(now) <= msec);
-}
-
 void DemuxWorker::slotDoWork()
 {
     if (filePath.isEmpty())
