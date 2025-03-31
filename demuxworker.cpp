@@ -49,6 +49,13 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx, const enum AVPixelF
 }
 #endif
 
+static int interrupt_callback(void *ctx)
+{
+    DemuxWorker *worker = reinterpret_cast<DemuxWorker*>(ctx);
+    // 当 isPlay 为 false 时返回非 0，中断阻塞调用
+    return (worker->isPlay ? 0 : 1);
+}
+
 DemuxWorker::DemuxWorker(QObject *parent):QObject (parent)
 {
     qDebug()<<"Thread构造函数ID:"<<QThread::currentThreadId();
@@ -139,6 +146,10 @@ void DemuxWorker::slotDoWork()
         cleanup();
         return;
     }
+
+    // 设置中断回调
+    avFormatContext->interrupt_callback.callback = interrupt_callback;
+    avFormatContext->interrupt_callback.opaque = this;
 
     packet = av_packet_alloc();
     pFrame = av_frame_alloc();
@@ -534,8 +545,18 @@ void DemuxWorker::slotDoWork()
         }
 
         av_packet_unref(packet); // 处理完 packet 后，清理
-        QCoreApplication::processEvents(); // 处理 queued 信号
-    }
 
+#ifdef Q_OS_WIN
+        QCoreApplication::processEvents(); // 处理 queued 信号
+#else
+        // 每 5 次循环处理一次 queued 事件，减少对阻塞调用的影响
+        static int loopCount = 0;
+        loopCount++;
+        if (loopCount % 5 == 0) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 0);
+            QThread::yieldCurrentThread();
+        }
+#endif
+    }
     cleanup();
 }

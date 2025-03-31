@@ -231,6 +231,8 @@ void MediaWindow::stopPlay()
     if (demuxWorker) {
         // 通知 worker 停止播放
         demuxWorker->isPlay = false;
+        // 如果处于暂停状态，先唤醒，防止线程阻塞
+        demuxWorker->pauseCondition.wakeAll();
         // 请求线程中断并结束事件循环
         if (demuxThread) {
             demuxThread->requestInterruption();
@@ -368,9 +370,9 @@ void MediaWindow::setupConnections()
     connect(demuxWorker, &DemuxWorker::sigUpdateTime, this, &MediaWindow::updateTimeLabel);
     connect(demuxWorker, &DemuxWorker::sigCodecInfo, this, &MediaWindow::updateCodecInfo);
 
-    connect(this, &MediaWindow::sigSeekTo, demuxWorker, &DemuxWorker::seekTo);
-    connect(this, &MediaWindow::sigSeekRelative, demuxWorker, &DemuxWorker::seekRelative);
-    connect(this, &MediaWindow::sigSetVolume, demuxWorker, &DemuxWorker::setVolume);
+    connect(this, &MediaWindow::sigSeekTo, demuxWorker, &DemuxWorker::seekTo, Qt::QueuedConnection);
+    connect(this, &MediaWindow::sigSeekRelative, demuxWorker, &DemuxWorker::seekRelative, Qt::QueuedConnection);
+    connect(this, &MediaWindow::sigSetVolume, demuxWorker, &DemuxWorker::setVolume, Qt::QueuedConnection);
 }
 
 void MediaWindow::setupControlPanel()
