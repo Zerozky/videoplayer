@@ -413,12 +413,9 @@ void MediaWindow::updateVideoList()
     filters << "*.mp4" << "*.mkv" << "*.avi" << "*.mov";
     QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files, QDir::Name);
     for (const QFileInfo &fi : fileList) {
-        // 仅显示与当前视频不同的文件
-        if(fi.absoluteFilePath() != selectedFilePath) {
-            QListWidgetItem *item = new QListWidgetItem(fi.fileName(), videoListWidget);
-            item->setData(Qt::UserRole, fi.absoluteFilePath());
-            videoListWidget->addItem(item);
-        }
+        QListWidgetItem *item = new QListWidgetItem(fi.fileName(), videoListWidget);
+        item->setData(Qt::UserRole, fi.absoluteFilePath());
+        videoListWidget->addItem(item);
     }
 }
 
