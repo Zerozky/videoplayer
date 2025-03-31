@@ -14,6 +14,13 @@
 #include <QDebug>
 #include <QWindow>
 #include <QImage>
+#include <QFileInfo>
+#include <QDir>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QJsonDocument>
+#include <QJsonObject>
 extern "C" {
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
@@ -30,7 +37,7 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
     connect(playButton, &QPushButton::clicked, this, &MediaWindow::togglePlayPause);
 
-    // 新增：连接进度条和音量滑块事件
+    // 连接进度条和音量滑块事件
     connect(progressSlider, &QSlider::sliderReleased, this, &MediaWindow::onProgressSliderReleased);
     connect(volumeSlider, &QSlider::valueChanged, this, &MediaWindow::onVolumeSliderChanged);
     connect(rewindButton, &QPushButton::clicked, this, &MediaWindow::onRewindButtonClicked);
@@ -38,6 +45,12 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(progressSlider, &QSlider::sliderPressed, this, [this]() {
         sliderBeingDragged = true;
     });
+
+    // 右侧视频列表双击切换
+    connect(videoListWidget, &QListWidget::itemDoubleClicked, this, &MediaWindow::onVideoListDoubleClicked);
+    // DeepSeek 按钮点击
+    connect(deepSeekButton, &QPushButton::clicked, this, &MediaWindow::onDeepSeekButtonClicked);
+
 }
 
 MediaWindow::~MediaWindow()
@@ -135,6 +148,9 @@ void MediaWindow::openFile()
             playButton->setText("Pause");
 
             setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
+
+            // 更新右侧视频列表
+            updateVideoList();
         }
     });
 }
@@ -293,17 +309,93 @@ int MediaWindow::initVideoDisplay(int mWidth,int mHeight)
     return 0;
 }
 
+void MediaWindow::onVideoListDoubleClicked(QListWidgetItem *item)
+{
+    if(item) {
+        QString newFilePath = item->data(Qt::UserRole).toString();
+        if(!newFilePath.isEmpty() && newFilePath != selectedFilePath) {
+            // 停止当前播放
+            stopPlay();
+            // 更新文件路径
+            selectedFilePath = newFilePath;
+            // 更新窗口标题
+            setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
+            // 启动播放（相当于 openFile 后直接播放）
+            demuxThread = new QThread;
+            demuxWorker = new DemuxWorker;
+            demuxWorker->moveToThread(demuxThread);
+            setupConnections();
+            emit sigSetFilePath(selectedFilePath);
+            startPlay();
+        }
+    }
+}
+
+void MediaWindow::onDeepSeekButtonClicked()
+{
+    QString query = deepSeekLineEdit->text().trimmed();
+    if(query.isEmpty()) {
+        deepSeekResultText->setText("请输入查询内容。");
+        return;
+    }
+    // 假设 deepseekSearch(query) 是你已有的 DeepSeek API 函数，返回 QString 结果
+    // 这里用模拟结果
+    QString result = "Simulated DeepSeek result for query: " + query;
+    deepSeekResultText->setText(result);
+}
+
+void MediaWindow::updateVideoList()
+{
+    videoListWidget->clear();
+    // 获取当前视频文件所在目录
+    QFileInfo fileInfo(selectedFilePath);
+    QDir dir = fileInfo.absoluteDir();
+    // 筛选视频文件
+    QStringList filters;
+    filters << "*.mp4" << "*.mkv" << "*.avi" << "*.mov";
+    QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files, QDir::Name);
+    for (const QFileInfo &fi : fileList) {
+        // 仅显示与当前视频不同的文件
+        if(fi.absoluteFilePath() != selectedFilePath) {
+            QListWidgetItem *item = new QListWidgetItem(fi.fileName(), videoListWidget);
+            item->setData(Qt::UserRole, fi.absoluteFilePath());
+            videoListWidget->addItem(item);
+        }
+    }
+}
+
 void MediaWindow::setupUI()
 {
     // 创建主布局 Splitter
     mainSplitter = new QSplitter(Qt::Horizontal, this);
     leftSplitter = new QSplitter(Qt::Vertical);
 
-    // 创建三大区域 Frame
+    // 创建左侧两个区域 Frame
     videoFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Expanding);
     videoFrame->setAttribute(Qt::WA_NativeWindow);
     controlFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    rightFrame = createFrame(QSizePolicy::Preferred, QSizePolicy::Expanding);
+
+    // 创建右侧区域使用 QTabWidget
+    rightTabWidget = new QTabWidget(this);
+    // 第一个页面：视频列表
+    videoListWidget = new QListWidget(rightTabWidget);
+    videoListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    // 初始为空，后续可在切换视频时更新列表
+    rightTabWidget->addTab(videoListWidget, tr("Other Videos"));
+
+    // 第二个页面：DeepSeek 对话
+    deepSeekPage = new QWidget(rightTabWidget);
+    QVBoxLayout *deepSeekLayout = new QVBoxLayout(deepSeekPage);
+    deepSeekLineEdit = new QLineEdit(deepSeekPage);
+    deepSeekLineEdit->setPlaceholderText(tr("Enter DeepSeek query..."));
+    deepSeekButton = new QPushButton(tr("Search"), deepSeekPage);
+    deepSeekResultText = new QTextEdit(deepSeekPage);
+    deepSeekResultText->setReadOnly(true);
+    deepSeekLayout->addWidget(deepSeekLineEdit);
+    deepSeekLayout->addWidget(deepSeekButton);
+    deepSeekLayout->addWidget(deepSeekResultText);
+    deepSeekPage->setLayout(deepSeekLayout);
+    rightTabWidget->addTab(deepSeekPage, tr("DeepSeek"));
 
     // 视频显示区域
 #ifdef Q_OS_WIN
@@ -338,7 +430,7 @@ void MediaWindow::setupUI()
     leftSplitter->addWidget(controlFrame);
 
     mainSplitter->addWidget(leftSplitter);
-    mainSplitter->addWidget(rightFrame);
+    mainSplitter->addWidget(rightTabWidget);
 
     // 设置 Splitter 拉伸因子
     leftSplitter->setStretchFactor(0, 10);

@@ -10,6 +10,11 @@
 #include <QResizeEvent>
 #include <QFileDialog>
 #include <QSlider>
+#include <QTabWidget>
+#include <QListWidget>
+#include <QLineEdit>
+#include <QTextEdit>
+#include <QDir>
 #include "demuxworker.h"
 #ifdef Q_OS_WIN
 #include "cudavideowindow.h"
@@ -61,14 +66,28 @@ public slots:
 #endif
     int initVideoDisplay(int mWidth,int mHeight);
 
+    // 用于右侧页面的槽
+    void onVideoListDoubleClicked(QListWidgetItem *item);
+    void onDeepSeekButtonClicked();
+    void updateVideoList(); // 更新右侧视频列表
+
 private:
     // UI 部分
-    QSplitter *mainSplitter;      // Main horizontal splitter
-    QSplitter *leftSplitter;      // Left vertical splitter
+    QSplitter *mainSplitter;      // 主分割器
+    QSplitter *leftSplitter;      // 左侧垂直分割器
 
-    QFrame *videoFrame;           // Left top frame for video
-    QFrame *controlFrame;         // Left bottom frame for controls
-    QFrame *rightFrame;           // Right frame (播放列表)
+    QFrame *videoFrame;           // 左上视频区域
+    QFrame *controlFrame;         // 左下控制面板
+
+    // 右侧区域，包含两个页面
+    QTabWidget *rightTabWidget;
+    // 第一个页面：视频列表
+    QListWidget *videoListWidget;
+    // 第二个页面：DeepSeek 对话
+    QWidget *deepSeekPage;
+    QLineEdit *deepSeekLineEdit;
+    QPushButton *deepSeekButton;
+    QTextEdit *deepSeekResultText;
 
 #ifdef Q_OS_WIN
     CudaVideoWindow *cudaVideoWindow; // 用于 CUDA 渲染
