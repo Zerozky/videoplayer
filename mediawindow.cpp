@@ -29,6 +29,15 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
     connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
     connect(playButton, &QPushButton::clicked, this, &MediaWindow::togglePlayPause);
+
+    // 新增：连接进度条和音量滑块事件
+    connect(progressSlider, &QSlider::sliderReleased, this, &MediaWindow::onProgressSliderReleased);
+    connect(volumeSlider, &QSlider::valueChanged, this, &MediaWindow::onVolumeSliderChanged);
+    connect(rewindButton, &QPushButton::clicked, this, &MediaWindow::onRewindButtonClicked);
+    connect(forwardButton, &QPushButton::clicked, this, &MediaWindow::onForwardButtonClicked);
+    connect(progressSlider, &QSlider::sliderPressed, this, [this]() {
+        sliderBeingDragged = true;
+    });
 }
 
 MediaWindow::~MediaWindow()
@@ -150,6 +159,56 @@ void MediaWindow::togglePlayPause()
         else
             playButton->setText("Pause");
     }
+}
+
+void MediaWindow::updateTimeLabel(double currentTime, double totalTime)
+{
+    totalDuration = totalTime;  // 保存总时长
+    // 格式化时间（以秒为单位，转换为 mm:ss 格式）
+    QTime current(0, 0);
+    current = current.addSecs(static_cast<int>(currentTime));
+    QTime total(0, 0);
+    total = total.addSecs(static_cast<int>(totalTime));
+    timeInfoLabel->setText(current.toString("mm:ss") + " / " + total.toString("mm:ss"));
+
+    // 如果没有拖动 slider，则自动更新进度条
+    if (!sliderBeingDragged && totalTime > 0) {
+        int sliderValue = static_cast<int>((currentTime / totalTime) * progressSlider->maximum());
+        progressSlider->setValue(sliderValue);
+    }
+}
+
+void MediaWindow::updateCodecInfo(const QString &codecInfo)
+{
+    codecInfoLabel->setText(codecInfo);
+}
+
+void MediaWindow::onProgressSliderReleased()
+{
+    if(totalDuration > 0) {
+        double newPos = (static_cast<double>(progressSlider->value()) / progressSlider->maximum()) * totalDuration;
+        emit sigSeekTo(newPos);
+    }
+    sliderBeingDragged = false;
+}
+
+void MediaWindow::onVolumeSliderChanged(int value)
+{
+    // 将 0~100 的值转换为 0~1 的音量
+    double volume = value / 100.0;
+    emit sigSetVolume(volume);
+}
+
+void MediaWindow::onRewindButtonClicked()
+{
+    // 快退5秒
+    emit sigSeekRelative(-5.0);
+}
+
+void MediaWindow::onForwardButtonClicked()
+{
+    // 快进5秒
+    emit sigSeekRelative(5.0);
 }
 
 void MediaWindow::startPlay()
@@ -304,6 +363,14 @@ void MediaWindow::setupConnections()
 #endif
     connect(this, &MediaWindow::sigStartPlay, demuxWorker, &DemuxWorker::slotDoWork);
     connect(this, &MediaWindow::sigSetFilePath, demuxWorker, &DemuxWorker::setFilePath);
+
+    // 新增：接收播放时间更新和编解码器信息（需要在 DemuxWorker 中实现相应信号）
+    connect(demuxWorker, &DemuxWorker::sigUpdateTime, this, &MediaWindow::updateTimeLabel);
+    connect(demuxWorker, &DemuxWorker::sigCodecInfo, this, &MediaWindow::updateCodecInfo);
+
+    connect(this, &MediaWindow::sigSeekTo, demuxWorker, &DemuxWorker::seekTo);
+    connect(this, &MediaWindow::sigSeekRelative, demuxWorker, &DemuxWorker::seekRelative);
+    connect(this, &MediaWindow::sigSetVolume, demuxWorker, &DemuxWorker::setVolume);
 }
 
 void MediaWindow::setupControlPanel()
@@ -371,6 +438,7 @@ QSlider *MediaWindow::createSlider(int min, int max, int value)
     QSlider* slider = new QSlider(Qt::Horizontal);
     slider->setRange(min, max);
     slider->setValue(value);
+    slider->setTracking(true);  // 确保拖动时能发送信号
     return slider;
 }
 

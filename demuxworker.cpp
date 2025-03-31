@@ -67,6 +67,24 @@ void DemuxWorker::setFilePath(const QString &path)
     qDebug() << "File path set to:" << filePath;
 }
 
+void DemuxWorker::seekTo(double newTime)
+{
+    QMutexLocker locker(&seekMutex);
+    pendingSeekTime = newTime;
+}
+
+void DemuxWorker::seekRelative(double offset)
+{
+    QMutexLocker locker(&seekMutex);
+    pendingSeekOffset += offset;
+}
+
+void DemuxWorker::setVolume(double volume)
+{
+    if(m_audioSink)
+        m_audioSink->setVolume(volume);
+}
+
 void DemuxWorker::slotDoWork()
 {
     if (filePath.isEmpty())
@@ -157,6 +175,11 @@ void DemuxWorker::slotDoWork()
         cleanup();
         return;
     }
+
+    // 计算总时长（单位：秒）
+    double totalDuration = (avFormatContext->duration > 0)
+                               ? avFormatContext->duration / static_cast<double>(AV_TIME_BASE)
+                               : 0;
 
     // 查找音视频流索引
     for(unsigned int i = 0; i < avFormatContext->nb_streams; i++)
@@ -293,6 +316,7 @@ void DemuxWorker::slotDoWork()
         audioSink->setBufferSize(100 * 1024);
         // 获取 QIODevice 用于写入音频数据
         audioDevice = audioSink->start();
+        m_audioSink = audioSink;  // 保存到成员变量，用于后续音量调节
 
         // 初始化 SwrContext（音频重采样）
         swrCtx = swr_alloc();
@@ -321,7 +345,23 @@ void DemuxWorker::slotDoWork()
             return;
         }
     }
-    
+
+    m_avFormatContext = avFormatContext;
+    m_videoCodecContext = pVideoCodecContext;
+    m_audioCodecContext = pAudioCodecContext;
+
+    // 发射编解码器信息信号
+    QString codecInfo;
+    if(pCodecVideo) {
+        codecInfo += QString("%1/").arg(pCodecVideo->name).toUpper();
+    }
+    if(audioStream != -1) {
+        const AVCodec *pCodecAudio = avcodec_find_decoder(avFormatContext->streams[audioStream]->codecpar->codec_id);
+        if(pCodecAudio)
+            codecInfo += QString("%1").arg(pCodecAudio->name).toUpper();
+    }
+    emit sigCodecInfo(codecInfo);
+
     // 记录开始播放时间和暂停累计时间
     qint64 startTime = 0;
     qint64 pauseTotal = 0;
@@ -331,6 +371,30 @@ void DemuxWorker::slotDoWork()
     startTime = timer.elapsed();  // 初始播放时间
 
     while(isPlay) {
+        // 检查跳转请求（绝对或相对）
+        {
+            QMutexLocker locker(&seekMutex);
+            if (pendingSeekTime >= 0 || pendingSeekOffset != 0) {
+                double referenceTime = currentPlaybackTime;  // 使用当前播放时间作为参考
+                double targetTime = (pendingSeekTime >= 0) ? pendingSeekTime : (referenceTime + pendingSeekOffset);
+                int64_t timestamp = static_cast<int64_t>(targetTime * AV_TIME_BASE);
+                if(avformat_seek_file(avFormatContext, -1, INT64_MIN, timestamp, INT64_MAX, 0) < 0) {
+                    qDebug() << "Seek failed!";
+                } else {
+                    if (pVideoCodecContext)
+                        avcodec_flush_buffers(pVideoCodecContext);
+                    if (pAudioCodecContext)
+                        avcodec_flush_buffers(pAudioCodecContext);
+                    // 重置计时器，使得 effectiveTime 立刻匹配 targetTime：
+                    startTime = timer.elapsed() - static_cast<qint64>(targetTime * 1000);
+                    pauseTotal = 0;
+                    currentPlaybackTime = targetTime;
+                }
+                pendingSeekTime = -1;
+                pendingSeekOffset = 0;
+            }
+        }
+
         // 如果暂停，则进入阻塞等待状态
         pauseMutex.lock();
         while(isPause && isPlay) {
@@ -411,6 +475,8 @@ void DemuxWorker::slotDoWork()
                 // 计算有效播放时间（秒）
                 double effectiveTime = (timer.elapsed() - startTime - pauseTotal) / 1000.0;
                 double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
+                currentPlaybackTime = currentPts;  // 更新当前播放时间
+                emit sigUpdateTime(currentPts, totalDuration);  // 发射当前时间和总时长
                 double delay = currentPts - effectiveTime;
                 if (delay > 0) {
                     // 延时等待视频帧显示时机到来
@@ -467,7 +533,8 @@ void DemuxWorker::slotDoWork()
             }
         }
 
-        av_packet_unref(packet); // 注意清理，容易造成内存泄漏
+        av_packet_unref(packet); // 处理完 packet 后，清理
+        QCoreApplication::processEvents(); // 处理 queued 信号
     }
 
     cleanup();

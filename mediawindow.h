@@ -39,12 +39,21 @@ public:
 signals:
     void sigStartPlay();
     void sigSetFilePath(const QString &filePath);
+    void sigSeekTo(double newTime);         // 直接跳转到某个时间
+    void sigSetVolume(double volume);         // 设置音量，0~1
+    void sigSeekRelative(double offset);      // 相对跳转（快退/快进）
 
 public slots:
     void startPlay();
     void stopPlay();
     void openFile();
     void togglePlayPause();
+    void updateTimeLabel(double currentTime, double totalTime);
+    void updateCodecInfo(const QString &codecInfo);
+    void onProgressSliderReleased();
+    void onVolumeSliderChanged(int value);
+    void onRewindButtonClicked();
+    void onForwardButtonClicked();
 #ifdef Q_OS_WIN
     void updateCudaVideo(AVFrame *pFrame);
 #else
@@ -98,6 +107,9 @@ private:
     // QImage 渲染方案时保存视频原始宽高
     int videoWidth = 0;
     int videoHeight = 0;
+
+    double totalDuration = 0; // 保存视频总时长（单位：秒）
+    bool sliderBeingDragged = false;  // 标记进度条是否正在被拖动
 
 #ifdef Q_OS_WIN
     // 在 MediaWindow 类中增加成员变量
