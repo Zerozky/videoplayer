@@ -22,11 +22,11 @@ extern "C" {
 #include <libavutil/time.h>
 }
 
-// 在文件顶部加入硬件像素格式选择回调函数
+// 硬件像素格式选择回调函数
 #if defined(Q_OS_WIN)
 static enum AVPixelFormat get_hw_format(AVCodecContext *ctx, const enum AVPixelFormat *pix_fmts)
 {
-    // 优先选择 NVDEC 使用的硬件像素格式（通常为 AV_PIX_FMT_CUDA）
+    // NVDEC 使用的硬件像素格式
     const enum AVPixelFormat *p;
     for (p = pix_fmts; *p != -1; p++) {
         if (*p == AV_PIX_FMT_CUDA)
@@ -38,7 +38,7 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx, const enum AVPixelF
 #elif defined(Q_OS_MAC)
 static enum AVPixelFormat get_hw_format(AVCodecContext *ctx, const enum AVPixelFormat *pix_fmts)
 {
-    // VideoToolbox 通常使用 AV_PIX_FMT_VIDEOTOOLBOX
+    // VideoToolbox 使用的硬件像素格式
     const enum AVPixelFormat *p;
     for (p = pix_fmts; *p != -1; p++) {
         if (*p == AV_PIX_FMT_VIDEOTOOLBOX)
@@ -52,7 +52,7 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx, const enum AVPixelF
 static int interrupt_callback(void *ctx)
 {
     DemuxWorker *worker = reinterpret_cast<DemuxWorker*>(ctx);
-    // 当 isPlay 为 false 时返回非 0，中断阻塞调用
+    // 当 isPlay 为 false 时中断阻塞调用
     return (worker->isPlay ? 0 : 1);
 }
 
@@ -100,7 +100,7 @@ void DemuxWorker::slotDoWork()
         return;
     }
 
-    // 声明所有需要释放的资源指针，初始均为 nullptr
+    // 声明所有需要释放的资源指针
     AVFormatContext *avFormatContext = nullptr;
     AVPacket *packet = nullptr;
     AVFrame *pFrame = nullptr;
@@ -110,7 +110,7 @@ void DemuxWorker::slotDoWork()
     QAudioSink *audioSink = nullptr;
     QIODevice *audioDevice = nullptr;
 
-    // 定义局部 lambda 进行统一清理
+    // 定义局部 lambda 统一清理
     auto cleanup = [&]() {
         if (audioSink) {
             audioSink->stop();
@@ -138,7 +138,7 @@ void DemuxWorker::slotDoWork()
         }
     };
 
-    //1.分配解复用器上下文
+    // 1.分配解复用器上下文
     avFormatContext = avformat_alloc_context();
     if (!avFormatContext)
     {
@@ -214,7 +214,7 @@ void DemuxWorker::slotDoWork()
     if(videoStream != -1)
     {
         pVideoCodecPara = avFormatContext->streams[videoStream]->codecpar;
-        //1.分配编解码器上下文
+        // 1.分配编解码器上下文
         pVideoCodecContext =  avcodec_alloc_context3(nullptr);
         if (!pVideoCodecContext){
             qDebug() <<  "avcodec_alloc_context3 failed";
@@ -222,7 +222,7 @@ void DemuxWorker::slotDoWork()
             return;
         }
 
-        //2.将码流中的编解码器信息拷贝到AVCodecContext
+        // 2.将码流中的编解码器信息拷贝到AVCodecContext
         err = avcodec_parameters_to_context(pVideoCodecContext, pVideoCodecPara);
         if (err < 0){
             qDebug() << "avcodec_parameters_to_context failed";
@@ -237,7 +237,7 @@ void DemuxWorker::slotDoWork()
             err = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_CUDA, nullptr, nullptr, 0);
             if (err < 0) {
                 qDebug() << "Failed to create CUDA device context for NVDEC, error:" << err;
-                // 回退到纯软件解码：不设置硬件设备上下文
+                // 回退到纯软件解码
             } else {
                 pVideoCodecContext->hw_device_ctx = av_buffer_ref(hw_device_ctx);
                 // 释放原始引用
@@ -250,7 +250,7 @@ void DemuxWorker::slotDoWork()
             err = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_VIDEOTOOLBOX, nullptr, nullptr, 0);
             if (err < 0) {
                 qDebug() << "Failed to create VideoToolbox device context, error:" << err;
-                // 回退到纯软件解码：不设置硬件设备上下文
+                // 回退到纯软件解码
             } else {
                 pVideoCodecContext->hw_device_ctx = av_buffer_ref(hw_device_ctx);
                 // 释放原始引用
@@ -261,7 +261,7 @@ void DemuxWorker::slotDoWork()
         // 设置选择硬件像素格式的回调函数
         pVideoCodecContext->get_format = get_hw_format;
 
-        //3.根据编解码器信息查找相应的解码器
+        // 3.根据编解码器信息查找相应的解码器
         pCodecVideo = avcodec_find_decoder(pVideoCodecPara->codec_id);
         if(pCodecVideo == nullptr) {
             qDebug() <<  "avcodec_find_decoder failed";
@@ -270,7 +270,7 @@ void DemuxWorker::slotDoWork()
         }
         qDebug() << "视频编解码器名:" << pCodecVideo->long_name;
 
-        //4.打开编解码器并关联到AVCodecContext
+        // 4.打开编解码器并关联到AVCodecContext
         err = avcodec_open2(pVideoCodecContext, pCodecVideo, nullptr);
         if(err){
             qDebug() << "avcodec_open2 failed";
@@ -327,8 +327,7 @@ void DemuxWorker::slotDoWork()
         audioSink->setBufferSize(100 * 1024);
         // 获取 QIODevice 用于写入音频数据
         audioDevice = audioSink->start();
-        m_audioSink = audioSink;  // 保存到成员变量，用于后续音量调节
-
+        m_audioSink = audioSink;
         // 初始化 SwrContext（音频重采样）
         swrCtx = swr_alloc();
         if (!swrCtx) {
@@ -382,7 +381,7 @@ void DemuxWorker::slotDoWork()
     startTime = timer.elapsed();  // 初始播放时间
 
     while(isPlay) {
-        // 检查跳转请求（绝对或相对）
+        // 检查跳转请求
         {
             QMutexLocker locker(&seekMutex);
             if (pendingSeekTime >= 0 || pendingSeekOffset != 0) {
@@ -396,7 +395,7 @@ void DemuxWorker::slotDoWork()
                         avcodec_flush_buffers(pVideoCodecContext);
                     if (pAudioCodecContext)
                         avcodec_flush_buffers(pAudioCodecContext);
-                    // 重置计时器，使得 effectiveTime 立刻匹配 targetTime：
+                    // 重置计时器，使 effectiveTime 立刻匹配 targetTime：
                     startTime = timer.elapsed() - static_cast<qint64>(targetTime * 1000);
                     pauseTotal = 0;
                     currentPlaybackTime = targetTime;
@@ -451,7 +450,7 @@ void DemuxWorker::slotDoWork()
                 qDebug() << "发送视频帧失败!"<<  err;
             }
 
-            //5.2接收解码后的帧
+            // 5.2接收解码后的帧
             while(avcodec_receive_frame(pVideoCodecContext, pFrame) == 0) {
                 if (!isPlay) {
                     break;
@@ -517,7 +516,7 @@ void DemuxWorker::slotDoWork()
                     continue;
                 }
 
-                // 使用 av_channel_layout_default 设定通道布局
+                // 设定通道布局
                 av_channel_layout_default(&resampledFrame->ch_layout, 2);  // 2 代表立体声
                 resampledFrame->sample_rate = pAudioCodecContext->sample_rate;
                 resampledFrame->format = AV_SAMPLE_FMT_S16;
@@ -544,7 +543,7 @@ void DemuxWorker::slotDoWork()
             }
         }
 
-        av_packet_unref(packet); // 处理完 packet 后，清理
+        av_packet_unref(packet);
 
 #ifdef Q_OS_WIN
         QCoreApplication::processEvents(); // 处理 queued 信号

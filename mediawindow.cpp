@@ -30,6 +30,8 @@ extern "C" {
 MediaWindow::MediaWindow(QWidget *parent) :
     QWidget(parent)
 {
+    m_networkManager = new QNetworkAccessManager(this);
+
     setupUI();
     setupConnections();
 
@@ -181,7 +183,7 @@ void MediaWindow::togglePlayPause()
 void MediaWindow::updateTimeLabel(double currentTime, double totalTime)
 {
     totalDuration = totalTime;  // 保存总时长
-    // 格式化时间（以秒为单位，转换为 mm:ss 格式）
+    // 格式化时间（以秒为单位，mm:ss 格式）
     QTime current(0, 0);
     current = current.addSecs(static_cast<int>(currentTime));
     QTime total(0, 0);
@@ -271,7 +273,7 @@ void MediaWindow::stopPlay()
     playButton->setEnabled(true);
     playButton->setText("Play");
 
-    // 安全删除线程和 worker，使用 deleteLater() 避免同步删除引发 pending 调用问题
+    // 安全删除线程和 worker
     if (demuxThread) {
         demuxThread->deleteLater();
         demuxThread = nullptr;
@@ -321,7 +323,7 @@ void MediaWindow::onVideoListDoubleClicked(QListWidgetItem *item)
             selectedFilePath = newFilePath;
             // 更新窗口标题
             setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
-            // 启动播放（相当于 openFile 后直接播放）
+            // 启动播放
             demuxThread = new QThread;
             demuxWorker = new DemuxWorker;
             demuxWorker->moveToThread(demuxThread);
@@ -340,19 +342,19 @@ void MediaWindow::onDeepSeekButtonClicked()
         return;
     }
 
-    // 构造 DeepSeek API 请求（根据 API 文档，调整 URL 和参数）
+    // 构造 DeepSeek API 请求
     QUrl url("https://api.deepseek.com/chat/completions");
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    // 添加授权头部，替换为你的实际 API Key
+    // 添加授权头部
     request.setRawHeader("Authorization", "Bearer sk-350bb32b02434688add2b505e5eb5eb0");
 
     // 构造 JSON 请求体
-    // 系统消息
+    // 系统信息
     QJsonObject systemMessage;
     systemMessage["role"] = "system";
     systemMessage["content"] = "You are a helpful assistant.";
-    // 用户消息
+    // 用户信息
     QJsonObject userMessage;
     userMessage["role"] = "user";
     userMessage["content"] = query;
@@ -369,36 +371,52 @@ void MediaWindow::onDeepSeekButtonClicked()
     QJsonDocument doc(json);
     QByteArray postData = doc.toJson();
 
-    // 创建网络管理器并发起 POST 请求
-    QNetworkAccessManager *manager = new QNetworkAccessManager(this);
-    QNetworkReply *reply = manager->post(request, postData);
+    // 发起 POST 请求
+    QNetworkReply *reply = m_networkManager->post(request, postData);
 
     // 当请求完成后解析响应
     connect(reply, &QNetworkReply::finished, [=](){
         if(reply->error() == QNetworkReply::NoError) {
             QByteArray response = reply->readAll();
+            qDebug() << "DeepSeek API 返回:" << response;
             QJsonDocument responseDoc = QJsonDocument::fromJson(response);
-            QJsonObject responseObj = responseDoc.object();
-            QString answer;
-            if(responseObj.contains("choices")){
-                QJsonArray choices = responseObj.value("choices").toArray();
-                if(!choices.isEmpty()){
-                    QJsonObject firstChoice = choices.first().toObject();
-                    if(firstChoice.contains("message")){
-                        QJsonObject messageObj = firstChoice.value("message").toObject();
-                        answer = messageObj.value("content").toString();
+            qDebug() << "1";
+            if(responseDoc.isNull() || !responseDoc.isObject()){
+                deepSeekResultText->setText("解析返回结果失败。返回内容: " + response);
+                qDebug() << "2";
+            } else {
+                QJsonObject responseObj = responseDoc.object();
+                QString answer;
+                qDebug() << "3";
+                if(responseObj.contains("choices")){
+                    QJsonArray choices = responseObj.value("choices").toArray();
+                    qDebug() << "4";
+                    if(!choices.isEmpty()){
+                        QJsonObject firstChoice = choices.first().toObject();
+                        qDebug() << "5";
+                        if(firstChoice.contains("message")){
+                            QJsonObject messageObj = firstChoice.value("message").toObject();
+                            answer = messageObj.value("content").toString();
+                            qDebug() << "6";
+                        }
                     }
                 }
+                qDebug() << "7";
+                if(answer.isEmpty()){
+                    answer = "未返回答案，请检查查询参数或 API 状态。";
+                    qDebug() << "8";
+                }
+                deepSeekResultText->setText(answer);
+                qDebug() << "9";
             }
-            if(answer.isEmpty()){
-                answer = "未返回答案，请检查查询参数或 API 状态。";
-            }
-            deepSeekResultText->setText(answer);
         } else {
+            qDebug() << "DeepSeek 请求错误:" << reply->errorString();
             deepSeekResultText->setText("请求失败: " + reply->errorString());
         }
+        qDebug() << "10";
         reply->deleteLater();
-        manager->deleteLater();
+        // manager->deleteLater();
+        qDebug() << "11";
     });
 }
 
@@ -454,14 +472,14 @@ void MediaWindow::setupUI()
 
     // 视频显示区域
 #ifdef Q_OS_WIN
-    // 创建 CudaVideoWindow，并通过 createWindowContainer 嵌入到 QWidget 布局中
+    // 创建 CudaVideoWindow，并通过 createWindowContainer 嵌入到 QWidget 中
     cudaVideoWindow = new CudaVideoWindow();
     QWidget *videoContainer = QWidget::createWindowContainer(cudaVideoWindow, this);
     videoContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     QVBoxLayout *videoLayout = new QVBoxLayout;
     videoLayout->setContentsMargins(0,0,0,0);
     videoLayout->addWidget(videoContainer);
-    // 使用一个容器 Frame 存放 cudaVideoWidget
+    // 使用 Frame 存放 cudaVideoWidget
     videoFrame = new QFrame();
     videoFrame->setLayout(videoLayout);
 #else
@@ -487,7 +505,7 @@ void MediaWindow::setupUI()
     mainSplitter->addWidget(leftSplitter);
     mainSplitter->addWidget(rightTabWidget);
 
-    // 设置 Splitter 拉伸因子
+    // 设置 Splitter 拉伸
     leftSplitter->setStretchFactor(0, 10);
     leftSplitter->setStretchFactor(1, 1);
 
@@ -513,7 +531,7 @@ void MediaWindow::setupConnections()
     connect(this, &MediaWindow::sigStartPlay, demuxWorker, &DemuxWorker::slotDoWork);
     connect(this, &MediaWindow::sigSetFilePath, demuxWorker, &DemuxWorker::setFilePath);
 
-    // 新增：接收播放时间更新和编解码器信息（需要在 DemuxWorker 中实现相应信号）
+    // 接收播放时间更新和编解码器信息
     connect(demuxWorker, &DemuxWorker::sigUpdateTime, this, &MediaWindow::updateTimeLabel);
     connect(demuxWorker, &DemuxWorker::sigCodecInfo, this, &MediaWindow::updateCodecInfo);
 
@@ -682,7 +700,7 @@ void MediaWindow::updateVideo(AVFrame *pFrame)
     }
 
     // 使用 sws_getCachedContext 来复用转换上下文
-    // 原始尺寸 videoWidth x videoHeight，目标尺寸为 targetW x targetH，转换格式固定为 RGB24
+    // 原始尺寸 videoWidth x videoHeight，目标尺寸为 targetW x targetH，转换格式为 RGB24
     static SwsContext *sws_ctx = nullptr;
     sws_ctx = sws_getCachedContext(sws_ctx,
                                    videoWidth, videoHeight, (AVPixelFormat)pFrame->format,
@@ -712,20 +730,19 @@ void MediaWindow::updateVideo(AVFrame *pFrame)
     }
     av_image_fill_arrays(pFrameRGB->data, pFrameRGB->linesize, buffer, AV_PIX_FMT_RGB24, targetW, targetH, 1);
 
-    // 进行颜色空间转换，同时直接缩放到目标尺寸
+    // 进行颜色空间转换并缩放到目标尺寸
     sws_scale(sws_ctx, pFrame->data, pFrame->linesize, 0, videoHeight,
               pFrameRGB->data, pFrameRGB->linesize);
 
-    // 创建 QImage
     QImage image(pFrameRGB->data[0], targetW, targetH, pFrameRGB->linesize[0], QImage::Format_RGB888);
     QImage imageCopy = image.copy();
 
-    // 释放转换过程分配的资源
+    // 释放资源
     av_free(buffer);
     av_frame_free(&pFrameRGB);
     av_frame_free(&pFrame);
 
-    // 在 GUI 线程中更新 videoLabel
+    // 在 GUI 中更新 videoLabel
     QMetaObject::invokeMethod(videoLabel, [=]() {
             videoLabel->setPixmap(QPixmap::fromImage(imageCopy));
         }, Qt::QueuedConnection);

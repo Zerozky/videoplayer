@@ -15,6 +15,7 @@
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QDir>
+#include <QNetworkAccessManager>
 #include "demuxworker.h"
 #ifdef Q_OS_WIN
 #include "cudavideowindow.h"
@@ -26,10 +27,6 @@ extern "C"
 #include <libswscale/swscale.h>
 #include <libavutil/time.h>
 #include <libswresample/swresample.h>
-// #include <SDL2/SDL.h>
-// #include <SDL2/SDL_video.h>
-// #include <SDL2/SDL_render.h>
-// #include <SDL2/SDL_rect.h>
 }
 
 class DemuxWorker;
@@ -44,8 +41,8 @@ public:
 signals:
     void sigStartPlay();
     void sigSetFilePath(const QString &filePath);
-    void sigSeekTo(double newTime);         // 直接跳转到某个时间
-    void sigSetVolume(double volume);         // 设置音量，0~1
+    void sigSeekTo(double newTime);         // 直接跳转
+    void sigSetVolume(double volume);         // 设置音量0~1
     void sigSeekRelative(double offset);      // 相对跳转（快退/快进）
 
 public slots:
@@ -90,9 +87,9 @@ private:
     QTextEdit *deepSeekResultText;
 
 #ifdef Q_OS_WIN
-    CudaVideoWindow *cudaVideoWindow; // 用于 CUDA 渲染
+    CudaVideoWindow *cudaVideoWindow; // Windows平台用CUDA渲染
 #else
-    QLabel *videoLabel; // 其他平台使用 QLabel
+    QLabel *videoLabel; // 其他平台使用QLabel
 #endif
 
     QSlider *progressSlider;
@@ -130,8 +127,9 @@ private:
     double totalDuration = 0; // 保存视频总时长（单位：秒）
     bool sliderBeingDragged = false;  // 标记进度条是否正在被拖动
 
+    QNetworkAccessManager *m_networkManager = nullptr;
+
 #ifdef Q_OS_WIN
-    // 在 MediaWindow 类中增加成员变量
     SwsContext *m_sws_ctx = nullptr;
     uint8_t *m_conversionBuffer = nullptr;
     int m_conversionBufferSize = 0;

@@ -15,7 +15,7 @@ CudaVideoWindow::CudaVideoWindow(QWindow *parent)
     , m_frameWidth(0)
     , m_frameHeight(0)
 {
-    // 如果需要嵌入到 QWidget 中，后面可以用 createWindowContainer() 包裹本窗口
+    // 可以用 createWindowContainer() 包裹并嵌入到 QWidget 中
 }
 
 CudaVideoWindow::~CudaVideoWindow()
@@ -48,7 +48,7 @@ void CudaVideoWindow::initializeGL()
     glBindTexture(GL_TEXTURE_2D, m_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // 先分配一个 1x1 纹理
+    // 分配一个 1x1 纹理
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -68,7 +68,6 @@ void CudaVideoWindow::initializeGL()
     } else {
         qDebug() << "CUDA resource registered successfully.";
     }
-    // 注意：QOpenGLWindow 不会使用 FBO 进行离屏渲染
 #endif
 }
 

@@ -53,12 +53,12 @@ private:
     double pendingSeekOffset = 0;        // 累计的相对跳转请求（秒）
     QMutex seekMutex;
 
-    // 为便于后续的 seek 操作，将解码上下文保存为成员变量，用于 seek 后 flush 缓冲区
+    // 用于 seek 后 flush 缓冲区
     AVFormatContext *m_avFormatContext = nullptr;
     AVCodecContext *m_videoCodecContext = nullptr;
     AVCodecContext *m_audioCodecContext = nullptr;
 
-    // 保存 QAudioSink 对象（便于实时调整音量）
+    // 便于实时调整音量）
     QAudioSink *m_audioSink = nullptr;
 
     double currentPlaybackTime = 0; // 保存当前播放时间（秒）
