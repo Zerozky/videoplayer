@@ -70,6 +70,7 @@ public slots:
 
     void onSelectStreamButtonClicked();
     void slotDisplaySubtitle(const QString &subtitleText);
+    void slotDisplaySubtitleImage(const QImage &subtitleImage);
 
 private:
     // UI 部分

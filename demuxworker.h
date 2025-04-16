@@ -40,6 +40,7 @@ signals:
     void sigUpdateTime(double currentTime, double totalTime);
     void sigCodecInfo(const QString &codecInfo);
     void sigSubtitle(const QString &subtitleText);
+    void sigSubtitleImage(const QImage &subtitleImage);
 
 public slots:
     void slotDoWork();

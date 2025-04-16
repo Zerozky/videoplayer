@@ -596,14 +596,51 @@ void DemuxWorker::slotDoWork()
             if (err < 0) {
                 qDebug() << "Decoding subtitle failed:" << err;
             } else if (gotSubtitle) {
-                qDebug() << "Subtitle decoded, num_rects:" << subtitle.num_rects;
-                if (subtitle.num_rects > 0 && subtitle.rects[0]) {
-                    if (subtitle.rects[0]->text) {
-                        QString subText = QString::fromUtf8(subtitle.rects[0]->text);
-                        qDebug() << "Subtitle text:" << subText;
-                        emit sigSubtitle(subText);
-                    } else {
-                        qDebug() << "Subtitle rect has no text. 它可能是图像字幕，需要额外处理。";
+                // 遍历每个 rect
+                for (int i = 0; i < subtitle.num_rects; i++) {
+                    AVSubtitleRect *rect = subtitle.rects[i];
+                    // 如果是图像字幕（例如 PGS）
+                    if (rect->type == SUBTITLE_BITMAP) {
+                        int w = rect->w, h = rect->h;
+                        if (w <= 0 || h <= 0 || !rect->data[0] || !rect->data[1]) {
+                            continue;
+                        }
+                        // 创建一个 QImage 格式为 ARGB32
+                        QImage img(w, h, QImage::Format_ARGB32);
+                        // 对于每个像素，根据 rect->linesize[0] 获取索引值，然后查找对应颜色
+                        for (int y = 0; y < h; y++) {
+                            for (int x = 0; x < w; x++) {
+                                // 这里假设 rect->linesize[0] 存在且有效
+                                int index = rect->data[0][y * rect->linesize[0] + x];
+                                // 注意：rect->colors 中的颜色通常存储为 ARGB 值
+                                uint32_t color = rect->data[1][index];
+                                img.setPixel(x, y, color);
+                            }
+                        }
+                        // 转换为无 alpha 的格式测试
+                        QImage showImg = img.convertToFormat(QImage::Format_RGB32);
+                        // 发射图像字幕信号
+                        emit sigSubtitleImage(img);
+                        qDebug() << "发射图像字幕信号";
+                    }
+                    // 如果是 ASS 字幕（或普通文本字幕）
+                    else if (rect->type == SUBTITLE_ASS) {
+                        if (rect->ass) {
+                            QString assText = QString::fromUtf8(rect->ass);
+                            emit sigSubtitle(assText);
+                        } else if (rect->text) {
+                            QString text = QString::fromUtf8(rect->text);
+                            emit sigSubtitle(text);
+                        }
+                    }
+                    else if (rect->type == SUBTITLE_TEXT) {
+                        if (rect->text) {
+                            QString text = QString::fromUtf8(rect->text);
+                            emit sigSubtitle(text);
+                        }
+                    }
+                    else {
+                        qDebug() << "Unknown subtitle rect type:" << rect->type;
                     }
                 }
                 avsubtitle_free(&subtitle);

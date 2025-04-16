@@ -496,12 +496,26 @@ void MediaWindow::onSelectStreamButtonClicked()
 void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
 {
     subtitleLabel->setText(subtitleText);
-    // 如果有字幕，则5秒后自动清除（可根据实际需要调整时间）
+    // 设定延时自动清除字幕显示
     if (!subtitleText.isEmpty()) {
         QTimer::singleShot(5000, this, [this]() {
             subtitleLabel->clear();
         });
     }
+}
+
+void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage)
+{
+    QPixmap pix = QPixmap::fromImage(subtitleImage);
+    // 如果收到图像字幕，则转换为 QPixmap 后显示
+    subtitleLabel->setPixmap(pix);
+    // 确保字幕层在父控件的最上层，并显示出来
+    subtitleLabel->raise();
+    subtitleLabel->show();
+    // 设定延时自动清除字幕显示
+    QTimer::singleShot(5000, this, [this]() {
+        subtitleLabel->clear();
+    });
 }
 
 void MediaWindow::setupUI()
@@ -616,6 +630,7 @@ void MediaWindow::setupConnections()
     connect(this, &MediaWindow::sigSeekRelative, demuxWorker, &DemuxWorker::seekRelative, Qt::QueuedConnection);
     connect(this, &MediaWindow::sigSetVolume, demuxWorker, &DemuxWorker::setVolume, Qt::QueuedConnection);
     connect(demuxWorker, &DemuxWorker::sigSubtitle, this, &MediaWindow::slotDisplaySubtitle);
+    connect(demuxWorker, &DemuxWorker::sigSubtitleImage, this, &MediaWindow::slotDisplaySubtitleImage);
 
 }
 
