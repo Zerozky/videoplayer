@@ -62,6 +62,18 @@ DemuxWorker::DemuxWorker(QObject *parent):QObject (parent)
     filePath = "";
 }
 
+void DemuxWorker::setStreamIndices(int videoIdx, int audioIdx, int subtitleIdx)
+{
+    selectedVideoStream = videoIdx;
+    selectedAudioStream = audioIdx;
+    selectedSubtitleStream = subtitleIdx;
+}
+
+double DemuxWorker::getcurrentPlaybackTime()
+{
+    return currentPlaybackTime;
+}
+
 DemuxWorker::~DemuxWorker()
 {
 
@@ -106,6 +118,7 @@ void DemuxWorker::slotDoWork()
     AVFrame *pFrame = nullptr;
     AVCodecContext *pVideoCodecContext = nullptr;
     AVCodecContext *pAudioCodecContext = nullptr;
+    AVCodecContext *pSubtitleCodecContext = nullptr;
     SwrContext *swrCtx = nullptr;
     QAudioSink *audioSink = nullptr;
     QIODevice *audioDevice = nullptr;
@@ -122,6 +135,9 @@ void DemuxWorker::slotDoWork()
         }
         if (pAudioCodecContext) {
             avcodec_free_context(&pAudioCodecContext);
+        }
+        if (pSubtitleCodecContext) {
+            avcodec_free_context(&pSubtitleCodecContext);
         }
         if (swrCtx) {
             swr_free(&swrCtx);
@@ -160,8 +176,10 @@ void DemuxWorker::slotDoWork()
         return;
     }
 
-    int audioStream = -1;
-    int videoStream = -1;
+    // 如果用户没有选择特定的流，则默认值为 -1
+    int videoStream = (selectedVideoStream >= 0 ? selectedVideoStream : -1);
+    int audioStream = (selectedAudioStream >= 0 ? selectedAudioStream : -1);
+    int subtitleStream = (selectedSubtitleStream >= 0 ? selectedSubtitleStream : -1);
     int err = -1;
 
     QByteArray filePathBytes = filePath.toLocal8Bit();
@@ -193,18 +211,44 @@ void DemuxWorker::slotDoWork()
                                : 0;
 
     // 查找音视频流索引
-    for(unsigned int i = 0; i < avFormatContext->nb_streams; i++)
-    {
-        if(avFormatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
-            audioStream = static_cast<int>(i);
-        else if(avFormatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
-            videoStream = static_cast<int>(i);
+    for (unsigned int i = 0; i < avFormatContext->nb_streams; i++) {
+        AVMediaType type = avFormatContext->streams[i]->codecpar->codec_type;
+        if(type == AVMEDIA_TYPE_VIDEO && videoStream < 0)
+            videoStream = i;
+        else if(type == AVMEDIA_TYPE_AUDIO && audioStream < 0)
+            audioStream = i;
+        else if(type == AVMEDIA_TYPE_SUBTITLE && subtitleStream < 0)
+            subtitleStream = i;
     }
     if(audioStream == -1 && videoStream == -1)
     {
         qDebug() << "Didn't find a valid stream";
         cleanup();
         return;
+    }
+
+    // 字幕解码器初始化
+    if (subtitleStream != -1) {
+        AVCodecParameters *pSubtitleCodecPara = avFormatContext->streams[subtitleStream]->codecpar;
+        pSubtitleCodecContext = avcodec_alloc_context3(nullptr);
+        if (!pSubtitleCodecContext) {
+            qDebug() << "avcodec_alloc_context3 for subtitle failed";
+        } else if (avcodec_parameters_to_context(pSubtitleCodecContext, pSubtitleCodecPara) < 0) {
+            qDebug() << "avcodec_parameters_to_context for subtitle failed";
+            avcodec_free_context(&pSubtitleCodecContext);
+            pSubtitleCodecContext = nullptr;
+        } else {
+            const AVCodec *pCodecSubtitle = avcodec_find_decoder(pSubtitleCodecPara->codec_id);
+            if (!pCodecSubtitle) {
+                qDebug() << "avcodec_find_decoder for subtitle failed";
+                avcodec_free_context(&pSubtitleCodecContext);
+                pSubtitleCodecContext = nullptr;
+            } else if (avcodec_open2(pSubtitleCodecContext, pCodecSubtitle, nullptr) < 0) {
+                qDebug() << "avcodec_open2 for subtitle failed";
+                avcodec_free_context(&pSubtitleCodecContext);
+                pSubtitleCodecContext = nullptr;
+            }
+        }
     }
 
     // 初始化视频解码器
@@ -337,16 +381,17 @@ void DemuxWorker::slotDoWork()
         }
 
         // 使用 AVChannelLayout 代替 channel_layout
-        AVChannelLayout in_ch_layout;
-        av_channel_layout_default(&in_ch_layout, pAudioCodecPara->ch_layout.nb_channels);
+        AVChannelLayout in_ch_layout = pAudioCodecPara->ch_layout;
 
         AVChannelLayout out_ch_layout;
         av_channel_layout_default(&out_ch_layout, 2);  // 输出设为立体声
 
         av_opt_set_chlayout(swrCtx, "in_chlayout", &in_ch_layout, 0);
         av_opt_set_chlayout(swrCtx, "out_chlayout", &out_ch_layout, 0);
+
         av_opt_set_int(swrCtx, "in_sample_rate", pAudioCodecPara->sample_rate, 0);
         av_opt_set_int(swrCtx, "out_sample_rate", pAudioCodecPara->sample_rate, 0);
+
         av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", (AVSampleFormat)pAudioCodecPara->format, 0);
         av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
         if (swr_init(swrCtx) < 0) {
@@ -540,6 +585,28 @@ void DemuxWorker::slotDoWork()
                 }
 
                 av_frame_free(&resampledFrame);
+            }
+        }
+        // 处理字幕包
+        else if (packet->stream_index == subtitleStream && pSubtitleCodecContext) {
+            AVSubtitle subtitle;
+            memset(&subtitle, 0, sizeof(subtitle));
+            int gotSubtitle = 0;
+            err = avcodec_decode_subtitle2(pSubtitleCodecContext, &subtitle, &gotSubtitle, packet);
+            if (err < 0) {
+                qDebug() << "Decoding subtitle failed:" << err;
+            } else if (gotSubtitle) {
+                qDebug() << "Subtitle decoded, num_rects:" << subtitle.num_rects;
+                if (subtitle.num_rects > 0 && subtitle.rects[0]) {
+                    if (subtitle.rects[0]->text) {
+                        QString subText = QString::fromUtf8(subtitle.rects[0]->text);
+                        qDebug() << "Subtitle text:" << subText;
+                        emit sigSubtitle(subText);
+                    } else {
+                        qDebug() << "Subtitle rect has no text. 它可能是图像字幕，需要额外处理。";
+                    }
+                }
+                avsubtitle_free(&subtitle);
             }
         }
 

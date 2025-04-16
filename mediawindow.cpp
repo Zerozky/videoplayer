@@ -22,6 +22,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QComboBox>
 extern "C" {
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
@@ -53,6 +54,9 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(videoListWidget, &QListWidget::itemDoubleClicked, this, &MediaWindow::onVideoListDoubleClicked);
     // DeepSeek 按钮点击
     connect(deepSeekButton, &QPushButton::clicked, this, &MediaWindow::onDeepSeekButtonClicked);
+
+    connect(selectStreamButton, &QPushButton::clicked, this, &MediaWindow::onSelectStreamButtonClicked);
+    // connect(loadSubtitleButton, &QPushButton::clicked, this, &MediaWindow::onLoadSubtitleButtonClicked);
 
 }
 
@@ -437,6 +441,62 @@ void MediaWindow::updateVideoList()
     }
 }
 
+void MediaWindow::onSelectStreamButtonClicked()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("选择流");
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QComboBox *videoCombo = new QComboBox(&dialog);
+    QComboBox *audioCombo = new QComboBox(&dialog);
+    QComboBox *subtitleCombo = new QComboBox(&dialog);
+
+    // 利用 FFmpeg 打开当前文件，并获取流信息（注意释放资源）
+    AVFormatContext *fmtCtx = nullptr;
+    QByteArray filePathBytes = selectedFilePath.toLocal8Bit();
+    if(avformat_open_input(&fmtCtx, filePathBytes.data(), nullptr, nullptr) != 0) {
+        QMessageBox::warning(this, "错误", "无法打开文件获取流信息。");
+        return;
+    }
+    if(avformat_find_stream_info(fmtCtx, nullptr) < 0) {
+        QMessageBox::warning(this, "错误", "无法获取流信息。");
+        avformat_close_input(&fmtCtx);
+        return;
+    }
+    for (unsigned int i = 0; i < fmtCtx->nb_streams; i++) {
+        AVStream *stream = fmtCtx->streams[i];
+        QString desc = QString("索引 %1: ").arg(i);
+        if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            desc += "视频";
+            videoCombo->addItem(desc, i);
+        } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            desc += "音频";
+            audioCombo->addItem(desc, i);
+        } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            desc += "字幕";
+            subtitleCombo->addItem(desc, i);
+        }
+    }
+    avformat_close_input(&fmtCtx);
+
+    layout->addWidget(new QLabel("视频流：", &dialog));
+    layout->addWidget(videoCombo);
+    layout->addWidget(new QLabel("音频流：", &dialog));
+    layout->addWidget(audioCombo);
+    layout->addWidget(new QLabel("字幕流：", &dialog));
+    layout->addWidget(subtitleCombo);
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(buttonBox);
+    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() == QDialog::Accepted) {
+        selectedVideoStream = videoCombo->currentData().toInt();
+        selectedAudioStream = audioCombo->currentData().toInt();
+        selectedSubtitleStream = subtitleCombo->currentData().toInt();
+        // 重启播放
+        restartPlaybackAfterStreamSelection();
+    }
+}
+
 void MediaWindow::setupUI()
 {
     // 创建主布局 Splitter
@@ -540,6 +600,40 @@ void MediaWindow::setupConnections()
     connect(this, &MediaWindow::sigSetVolume, demuxWorker, &DemuxWorker::setVolume, Qt::QueuedConnection);
 }
 
+void MediaWindow::restartPlaybackAfterStreamSelection()
+{
+    // 停止当前播放，断开信号连接，并确保线程退出
+    if(demuxWorker) {
+        demuxWorker->isPlay = false;
+        demuxWorker->pauseCondition.wakeAll();
+    }
+    if (demuxThread) {
+        demuxThread->requestInterruption();
+        demuxThread->quit();
+        demuxThread->wait();
+        demuxThread->deleteLater();
+        demuxThread = nullptr;
+    }
+    if (demuxWorker) {
+        demuxWorker->deleteLater();
+        demuxWorker = nullptr;
+    }
+    // 延时200ms之后重建播放线程，以确保所有资源都释放干净
+    QTimer::singleShot(200, this, [this]() {
+        // 建立新线程和 worker
+        demuxThread = new QThread;
+        demuxWorker = new DemuxWorker;
+        demuxWorker->moveToThread(demuxThread);
+        setupConnections(); // 重新建立所有信号连接
+        // 将新的流选择参数传递给新创建的 demuxWorker
+        demuxWorker->setStreamIndices(selectedVideoStream, selectedAudioStream, selectedSubtitleStream);
+        // 传入当前选择的文件路径
+        emit sigSetFilePath(selectedFilePath);
+        // 若需要，可以在此处传递当前播放位置（例如调用 seekTo(currentTime)）
+        startPlay();
+    });
+}
+
 void MediaWindow::setupControlPanel()
 {
     QVBoxLayout *controlLayout = new QVBoxLayout(controlFrame);
@@ -565,6 +659,8 @@ void MediaWindow::setupControlPanel()
     stopButton = createButton("Stop");
     rewindButton = createButton("<<");
     forwardButton = createButton(">>");
+    selectStreamButton = createButton("选择流");
+    loadSubtitleButton = createButton("加载外挂字幕");
 
     playButton->setEnabled(false);
 
@@ -573,6 +669,8 @@ void MediaWindow::setupControlPanel()
     row2Layout->addWidget(rewindButton);
     row2Layout->addWidget(forwardButton);
     row2Layout->addWidget(openButton);
+    row2Layout->addWidget(selectStreamButton);
+    row2Layout->addWidget(loadSubtitleButton);
     row2Layout->addStretch();
 
     // 信息标签

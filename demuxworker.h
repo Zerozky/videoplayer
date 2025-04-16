@@ -22,6 +22,8 @@ class DemuxWorker : public QObject
     Q_OBJECT
 public:
     explicit DemuxWorker(QObject *parent = nullptr);
+    void setStreamIndices(int videoIdx, int audioIdx, int subtitleIdx);
+    double getcurrentPlaybackTime();
     ~DemuxWorker();
 
 public:
@@ -37,6 +39,7 @@ signals:
     void sigGetVideoInfo(int mWidth,int mHeight);
     void sigUpdateTime(double currentTime, double totalTime);
     void sigCodecInfo(const QString &codecInfo);
+    void sigSubtitle(const QString &subtitleText);
 
 public slots:
     void slotDoWork();
@@ -62,6 +65,10 @@ private:
     QAudioSink *m_audioSink = nullptr;
 
     double currentPlaybackTime = 0; // 保存当前播放时间（秒）
+
+    int selectedVideoStream = -1;
+    int selectedAudioStream = -1;
+    int selectedSubtitleStream = -1;
 };
 
 #endif // DEMUXWORKER_H

@@ -68,6 +68,8 @@ public slots:
     void onDeepSeekButtonClicked();
     void updateVideoList(); // 更新右侧视频列表
 
+    void onSelectStreamButtonClicked();
+
 private:
     // UI 部分
     QSplitter *mainSplitter;      // 主分割器
@@ -97,9 +99,11 @@ private:
 
     QPushButton *stopButton;
     QPushButton *openButton;
-    QPushButton *playButton;      // 播放/暂停按钮
-    QPushButton *rewindButton;    // 快退
-    QPushButton *forwardButton;   // 快进
+    QPushButton *playButton;      // 播放/暂停 按钮
+    QPushButton *rewindButton;    // 快退 按钮
+    QPushButton *forwardButton;   // 快进 按钮
+    QPushButton *selectStreamButton;    // 选择流 按钮
+    QPushButton *loadSubtitleButton;    // 加载外挂字幕 按钮
 
     QLabel *timeInfoLabel;        // 视频当前时间 / 总时长
     QLabel *codecInfoLabel;       // 音视频编码器信息
@@ -135,6 +139,12 @@ private:
     int m_conversionBufferSize = 0;
     AVFrame *m_frameRGBA = nullptr;
 #endif
+
+    void restartPlaybackAfterStreamSelection();
+
+    int selectedVideoStream;
+    int selectedAudioStream;
+    int selectedSubtitleStream;
 };
 
 #endif // MEDIAWINDOW_H
