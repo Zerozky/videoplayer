@@ -69,6 +69,7 @@ public slots:
     void updateVideoList(); // 更新右侧视频列表
 
     void onSelectStreamButtonClicked();
+    void slotDisplaySubtitle(const QString &subtitleText);
 
 private:
     // UI 部分
@@ -107,6 +108,7 @@ private:
 
     QLabel *timeInfoLabel;        // 视频当前时间 / 总时长
     QLabel *codecInfoLabel;       // 音视频编码器信息
+    QLabel* subtitleLabel;        // 字幕
 
     QPushButton *toggleControlPanelButton; // 打开/隐藏控制面板
     QPushButton *togglePlaylistButton;     // 打开/关闭播放列表
@@ -141,10 +143,14 @@ private:
 #endif
 
     void restartPlaybackAfterStreamSelection();
+    QString getStreamDescription(AVStream *stream);
 
     int selectedVideoStream;
     int selectedAudioStream;
     int selectedSubtitleStream;
+
+    void resizeEvent(QResizeEvent *event);
+
 };
 
 #endif // MEDIAWINDOW_H

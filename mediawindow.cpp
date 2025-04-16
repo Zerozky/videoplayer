@@ -464,16 +464,12 @@ void MediaWindow::onSelectStreamButtonClicked()
     }
     for (unsigned int i = 0; i < fmtCtx->nb_streams; i++) {
         AVStream *stream = fmtCtx->streams[i];
-        QString desc = QString("索引 %1: ").arg(i);
         if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            desc += "视频";
-            videoCombo->addItem(desc, i);
+            videoCombo->addItem(getStreamDescription(stream), i);
         } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            desc += "音频";
-            audioCombo->addItem(desc, i);
+            audioCombo->addItem(getStreamDescription(stream), i);
         } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
-            desc += "字幕";
-            subtitleCombo->addItem(desc, i);
+            subtitleCombo->addItem(getStreamDescription(stream), i);
         }
     }
     avformat_close_input(&fmtCtx);
@@ -494,6 +490,17 @@ void MediaWindow::onSelectStreamButtonClicked()
         selectedSubtitleStream = subtitleCombo->currentData().toInt();
         // 重启播放
         restartPlaybackAfterStreamSelection();
+    }
+}
+
+void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
+{
+    subtitleLabel->setText(subtitleText);
+    // 如果有字幕，则5秒后自动清除（可根据实际需要调整时间）
+    if (!subtitleText.isEmpty()) {
+        QTimer::singleShot(5000, this, [this]() {
+            subtitleLabel->clear();
+        });
     }
 }
 
@@ -555,6 +562,16 @@ void MediaWindow::setupUI()
     videoFrame->setLayout(videoLayout);
 #endif
 
+    // 在 videoFrame 上添加字幕显示层
+    // 注意：这里直接以绝对定位实现，后续在窗口 resizeEvent 中更新位置
+    subtitleLabel = new QLabel(videoFrame);
+    subtitleLabel->setStyleSheet("color: white; background-color: rgba(0,0,0,128); font-size: 18px;");
+    subtitleLabel->setAlignment(Qt::AlignCenter);
+    subtitleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    // 初始位置设置在视频区域底部，宽度和 videoFrame 保持一致，高度设定为 50 像素
+    subtitleLabel->setGeometry(0, videoFrame->height() - 50, videoFrame->width(), 50);
+    subtitleLabel->raise(); // 确保在最上层显示
+
     //控制面板
     setupControlPanel();
 
@@ -598,6 +615,8 @@ void MediaWindow::setupConnections()
     connect(this, &MediaWindow::sigSeekTo, demuxWorker, &DemuxWorker::seekTo, Qt::QueuedConnection);
     connect(this, &MediaWindow::sigSeekRelative, demuxWorker, &DemuxWorker::seekRelative, Qt::QueuedConnection);
     connect(this, &MediaWindow::sigSetVolume, demuxWorker, &DemuxWorker::setVolume, Qt::QueuedConnection);
+    connect(demuxWorker, &DemuxWorker::sigSubtitle, this, &MediaWindow::slotDisplaySubtitle);
+
 }
 
 void MediaWindow::restartPlaybackAfterStreamSelection()
@@ -632,6 +651,48 @@ void MediaWindow::restartPlaybackAfterStreamSelection()
         // 若需要，可以在此处传递当前播放位置（例如调用 seekTo(currentTime)）
         startPlay();
     });
+}
+
+QString MediaWindow::getStreamDescription(AVStream *stream)
+{
+    QString desc = QString("索引 %1: ").arg(stream->index);
+    AVCodecParameters *par = stream->codecpar;
+    if (par->codec_type == AVMEDIA_TYPE_VIDEO) {
+        desc += "视频";
+        desc += QString(" (%1 x %2)").arg(stream->codecpar->width).arg(stream->codecpar->height);
+        // 可以读取附加信息，例如 codec id 的名称、可能的帧率等
+        const AVCodec *codec = avcodec_find_decoder(par->codec_id);
+        if(codec)
+            desc += QString(" - %1").arg(codec->long_name);
+    } else if (par->codec_type == AVMEDIA_TYPE_AUDIO) {
+        desc += "音频";
+        // 采样率、通道数、编码器名称等
+        desc += QString(" - %1 Hz, %2通道").arg(par->sample_rate).arg(par->ch_layout.nb_channels);
+        const AVCodec *codec = avcodec_find_decoder(par->codec_id);
+        if(codec)
+            desc += QString(" - %1").arg(codec->long_name);
+    } else if (par->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+        desc += "字幕";
+        // 可以从 metadata 中提取语言信息
+        AVDictionaryEntry *langEntry = av_dict_get(stream->metadata, "language", nullptr, 0);
+        if(langEntry)
+            desc += QString(" (%1)").arg(langEntry->value);
+        const AVCodec *codec = avcodec_find_decoder(par->codec_id);
+        if(codec)
+            desc += QString(" - %1").arg(codec->long_name);
+    }
+    return desc;
+
+}
+
+void MediaWindow::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    if (videoFrame && subtitleLabel) {
+        // 将字幕 Label 设置到 videoFrame 底部
+        subtitleLabel->setGeometry(0, videoFrame->height() - 50, videoFrame->width(), 50);
+        subtitleLabel->raise();
+    }
 }
 
 void MediaWindow::setupControlPanel()
