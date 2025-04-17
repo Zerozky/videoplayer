@@ -44,6 +44,7 @@ signals:
     void sigSeekTo(double newTime);         // 直接跳转
     void sigSetVolume(double volume);         // 设置音量0~1
     void sigSeekRelative(double offset);      // 相对跳转（快退/快进）
+    void sigLoadExternalSubtitle(const QString &path);
 
 public slots:
     void startPlay();
@@ -69,8 +70,9 @@ public slots:
     void updateVideoList(); // 更新右侧视频列表
 
     void onSelectStreamButtonClicked();
-    void slotDisplaySubtitle(const QString &subtitleText);
+    void slotDisplaySubtitle(const QString &subtitleText, int durationMs);
     void slotDisplaySubtitleImage(const QImage &subtitleImage, int durationMs);
+    void onLoadSubtitleButtonClicked();
 
 private:
     // UI 部分
@@ -156,6 +158,8 @@ private:
     int pausedVerticalRemaining = 0;
 
     void resizeEvent(QResizeEvent *event);
+
+    QString externalSubtitlePath;    // 保存外挂字幕文件路径
 
 };
 

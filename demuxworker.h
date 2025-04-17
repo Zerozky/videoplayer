@@ -10,6 +10,9 @@
 #include <QMutex>
 #include <QWaitCondition>
 #include <QAudioSink>
+#include <QFile>
+#include <QTextStream>
+#include <QTime>
 extern "C"
 {
 #include "libavutil/frame.h"
@@ -39,7 +42,7 @@ signals:
     void sigGetVideoInfo(int mWidth,int mHeight);
     void sigUpdateTime(double currentTime, double totalTime);
     void sigCodecInfo(const QString &codecInfo);
-    void sigSubtitle(const QString &subtitleText);
+    void sigSubtitle(const QString &subtitleText, int durationMs);
     void sigSubtitleImage(const QImage &subtitleImage, int durationMs);
 
 public slots:
@@ -48,6 +51,7 @@ public slots:
     void seekTo(double newTime);       // 直接跳转到指定时间（秒）
     void seekRelative(double offset);    // 相对跳转（例如快退/快进）
     void setVolume(double volume);       // 设置音量，0～1
+    void setExternalSubtitle(const QString &path);
 
 private:
     qint64 pauseAccumulated = 0; // 累计暂停的时间（毫秒）
@@ -70,6 +74,12 @@ private:
     int selectedVideoStream = -1;
     int selectedAudioStream = -1;
     int selectedSubtitleStream = -1;
+
+    QString externalSubtitlePath;
+
+    struct SubtitleEvent { qint64 startMs, endMs; QString text; };
+    std::vector<SubtitleEvent> externalEvents;
+    size_t externalEventIndex = 0;
 };
 
 #endif // DEMUXWORKER_H

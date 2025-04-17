@@ -104,6 +104,54 @@ void DemuxWorker::setVolume(double volume)
         m_audioSink->setVolume(volume);
 }
 
+void DemuxWorker::setExternalSubtitle(const QString &path)
+{
+    qDebug() << "DemuxWorker 收到外挂字幕路径：" << path;
+    // TODO: 在这里保存 path 到成员变量，然后在解复用时打开第二个 AVFormatContext
+    externalSubtitlePath = path;
+    externalEvents.clear();
+    externalEventIndex = 0;
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+
+    QTextStream in(&file);
+    bool inEvents = false;
+    while (!in.atEnd()) {
+        QString line = in.readLine();
+        if (line.trimmed().startsWith("[Events]")) {
+            inEvents = true;
+            continue;
+        }
+        if (!inEvents) continue;
+        if (!line.trimmed().startsWith("Dialogue:")) continue;
+
+        // 去掉 "Dialogue:" 前缀
+        QString body = line.mid(line.indexOf(":") + 1);
+        QStringList parts = body.split(",", Qt::KeepEmptyParts);
+        if (parts.size() < 10) continue;
+
+        auto parseTime = [&](const QString &t) -> qint64 {
+            // ASS 格式通常 h:mm:ss.cs
+            QTime qt = QTime::fromString(t, "h:mm:ss.zz");
+            if (!qt.isValid()) qt = QTime::fromString(t, "h:mm:ss.z");
+            if (!qt.isValid()) return 0;
+            return qt.hour()*3600000 + qt.minute()*60000 + qt.second()*1000 + qt.msec();
+        };
+
+        qint64 s = parseTime(parts[1].trimmed());
+        qint64 e = parseTime(parts[2].trimmed());
+        QString text = parts.mid(9).join(",");
+        text.replace("\\N", "\n");
+
+        if (e > s)
+            externalEvents.push_back({s, e, text});
+    }
+    file.close();
+
+}
+
 void DemuxWorker::slotDoWork()
 {
     if (filePath.isEmpty())
@@ -532,6 +580,18 @@ void DemuxWorker::slotDoWork()
                 double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
                 currentPlaybackTime = currentPts;  // 更新当前播放时间
                 emit sigUpdateTime(currentPts, totalDuration);  // 发射当前时间和总时长
+
+                //  外挂 ASS 事件触发
+                qint64 nowMs = qint64(currentPts * 1000);
+                while (externalEventIndex < externalEvents.size()
+                       && externalEvents[externalEventIndex].startMs <= nowMs) {
+                    auto &ev = externalEvents[externalEventIndex++];
+                    if (ev.endMs > nowMs) {
+                        int dur = int(ev.endMs - nowMs);
+                        emit sigSubtitle(ev.text, dur);
+                    }
+                }
+
                 double delay = currentPts - effectiveTime;
                 if (delay > 0) {
                     // 延时等待视频帧显示时机到来
@@ -635,16 +695,16 @@ void DemuxWorker::slotDoWork()
                     else if (rect->type == SUBTITLE_ASS) {
                         if (rect->ass) {
                             QString assText = QString::fromUtf8(rect->ass);
-                            emit sigSubtitle(assText);
+                            emit sigSubtitle(assText, 3000);
                         } else if (rect->text) {
                             QString text = QString::fromUtf8(rect->text);
-                            emit sigSubtitle(text);
+                            emit sigSubtitle(text, 3000);
                         }
                     }
                     else if (rect->type == SUBTITLE_TEXT) {
                         if (rect->text) {
                             QString text = QString::fromUtf8(rect->text);
-                            emit sigSubtitle(text);
+                            emit sigSubtitle(text, 3000);
                         }
                     }
                     else {

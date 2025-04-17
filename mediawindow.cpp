@@ -24,6 +24,8 @@
 #include <QJsonArray>
 #include <QComboBox>
 #include <QStackedLayout>
+#include <QGraphicsDropShadowEffect>
+#include <QRegularExpression>
 extern "C" {
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
@@ -57,7 +59,7 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(deepSeekButton, &QPushButton::clicked, this, &MediaWindow::onDeepSeekButtonClicked);
 
     connect(selectStreamButton, &QPushButton::clicked, this, &MediaWindow::onSelectStreamButtonClicked);
-    // connect(loadSubtitleButton, &QPushButton::clicked, this, &MediaWindow::onLoadSubtitleButtonClicked);
+    connect(loadSubtitleButton, &QPushButton::clicked, this, &MediaWindow::onLoadSubtitleButtonClicked);
 
     // —— 横排清除 ——
     subtitleClearTimer = new QTimer(this);
@@ -155,13 +157,30 @@ void MediaWindow::openFile()
         if (!filePath.isEmpty())
         {
             selectedFilePath = filePath;
+
             // 创建新的线程和 worker
             demuxThread = new QThread;
             demuxWorker = new DemuxWorker;
             demuxWorker->moveToThread(demuxThread);
             setupConnections();  // 仅建立信号连接
             qDebug() << "重新建立连接";
-            
+
+            // 自动寻找 .chs.ass 或 .cht.ass
+            QString base = QFileInfo(selectedFilePath).absolutePath() + "/" + QFileInfo(selectedFilePath).completeBaseName();
+            QString chs = base + ".chs.ass";
+            QString cht = base + ".cht.ass";
+
+            if (QFile::exists(chs)) {
+                externalSubtitlePath = chs;
+                emit sigLoadExternalSubtitle(externalSubtitlePath);
+                qDebug() << "自动加载简体字幕：" << externalSubtitlePath;
+            }
+            else if (QFile::exists(cht)) {
+                externalSubtitlePath = cht;
+                emit sigLoadExternalSubtitle(externalSubtitlePath);
+                qDebug() << "自动加载繁体字幕：" << externalSubtitlePath;
+            }
+
             emit sigSetFilePath(selectedFilePath);
             startPlay();
 
@@ -515,7 +534,7 @@ void MediaWindow::onSelectStreamButtonClicked()
     }
 }
 
-void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
+void MediaWindow::slotDisplaySubtitle(const QString &subtitleText, int durationMs)
 {
     // 如果空文本，则立刻清除并隐藏
     if (subtitleText.isEmpty()) {
@@ -525,14 +544,29 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
         return;
     }
 
+    // 去掉 ASS 样式
+    QString clean = subtitleText;
+    clean.remove(QRegularExpression("\\{[^}]*\\}"));
+
     // 把旧的 pixmap 清掉，切换到文本模式
     subtitleLabel->setPixmap(QPixmap());
 
     // 设置文字和样式
+    subtitleLabel->setWordWrap(true);
     QFont font = subtitleLabel->font();
     font.setPointSize(20);
     subtitleLabel->setFont(font);
-    subtitleLabel->setText(subtitleText);
+
+    // 创建一个阴影效果对象
+    QGraphicsDropShadowEffect *shadowEffect = new QGraphicsDropShadowEffect(subtitleLabel);
+    shadowEffect->setOffset(0, 0);             // 设置阴影偏移为零（正中央）
+    shadowEffect->setBlurRadius(8);            // 设置模糊半径
+    shadowEffect->setColor(Qt::black);         // 设置阴影颜色为黑色
+
+    // 应用阴影效果到 subtitleLabel
+    subtitleLabel->setGraphicsEffect(shadowEffect);
+
+    subtitleLabel->setText(clean);
 
     // 动态测算：宽度最多占容器 80%
     QWidget *overlay = videoFrame->layout()->itemAt(0)->widget();
@@ -540,14 +574,16 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
     int ch = overlay->height();
     int maxW = int(cw * 0.8);
 
-    QFontMetrics fm(subtitleLabel->font());
+    QFontMetrics fm(font);
     // 这里第二个参数给一个足够大的高度，word-wrap 会自动换行
-    QRect br = fm.boundingRect(0, 0, maxW, ch, Qt::AlignCenter | Qt::TextWordWrap, subtitleText);
+    QRect br = fm.boundingRect(0, 0, maxW, ch,
+                               Qt::AlignCenter | Qt::TextWordWrap,
+                               clean);
 
     // 加点内边距
     int pad = 10;
-    int w = br.width() + pad*2;
-    int h = br.height() + pad*2;
+    int w = br.width() + pad * 2;
+    int h = br.height() + pad * 2;
 
     // 放到底部居中，距底部 10px
     int x = (cw - w) / 2;
@@ -560,7 +596,7 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
 
     // 设定延时自动清除字幕显示
     subtitleClearTimer->stop();
-    subtitleClearTimer->start(5000);
+    subtitleClearTimer->start(durationMs);
 }
 
 void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int durationMs)
@@ -664,6 +700,27 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int dura
         subtitleClearTimer->stop();
         subtitleClearTimer->start(durationMs);
     }
+}
+
+void MediaWindow::onLoadSubtitleButtonClicked()
+{
+    // 默认路径：跟视频文件同目录
+    QString dir = QFileInfo(selectedFilePath).absolutePath();
+    QString filter = tr("ASS Subtitles (*.ass *.ssa)");
+    QString path = QFileDialog::getOpenFileName(
+        this,
+        tr("加载外挂字幕"),
+        dir,
+        filter
+        );
+    if (path.isEmpty())
+        return;
+
+    externalSubtitlePath = path;
+    qDebug() << "选中外挂字幕：" << externalSubtitlePath;
+
+    emit sigLoadExternalSubtitle(externalSubtitlePath);
+
 }
 
 void MediaWindow::setupUI()
@@ -785,7 +842,8 @@ void MediaWindow::setupConnections()
     connect(this, &MediaWindow::sigSetVolume, demuxWorker, &DemuxWorker::setVolume, Qt::QueuedConnection);
     connect(demuxWorker, &DemuxWorker::sigSubtitle, this, &MediaWindow::slotDisplaySubtitle);
     connect(demuxWorker, &DemuxWorker::sigSubtitleImage, this, &MediaWindow::slotDisplaySubtitleImage);
-
+    connect(this, &MediaWindow::sigLoadExternalSubtitle,
+            demuxWorker, &DemuxWorker::setExternalSubtitle);
 }
 
 void MediaWindow::restartPlaybackAfterStreamSelection()
