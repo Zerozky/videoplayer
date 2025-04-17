@@ -517,8 +517,47 @@ void MediaWindow::onSelectStreamButtonClicked()
 
 void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
 {
+    // 如果空文本，则立刻清除并隐藏
+    if (subtitleText.isEmpty()) {
+        subtitleLabel->clear();
+        subtitleLabel->hide();
+        subtitleClearTimer->stop();
+        return;
+    }
+
+    // 把旧的 pixmap 清掉，切换到文本模式
+    subtitleLabel->setPixmap(QPixmap());
+
+    // 设置文字和样式
+    QFont font = subtitleLabel->font();
+    font.setPointSize(20);
+    subtitleLabel->setFont(font);
     subtitleLabel->setText(subtitleText);
+
+    // 动态测算：宽度最多占容器 80%
+    QWidget *overlay = videoFrame->layout()->itemAt(0)->widget();
+    int cw = overlay->width();
+    int ch = overlay->height();
+    int maxW = int(cw * 0.8);
+
+    QFontMetrics fm(subtitleLabel->font());
+    // 这里第二个参数给一个足够大的高度，word-wrap 会自动换行
+    QRect br = fm.boundingRect(0, 0, maxW, ch, Qt::AlignCenter | Qt::TextWordWrap, subtitleText);
+
+    // 加点内边距
+    int pad = 10;
+    int w = br.width() + pad*2;
+    int h = br.height() + pad*2;
+
+    // 放到底部居中，距底部 10px
+    int x = (cw - w) / 2;
+    int y = ch - h - 10;
+    subtitleLabel->setGeometry(x, y, w, h);
+
+    // 显示
     subtitleLabel->show();
+    subtitleLabel->raise();
+
     // 设定延时自动清除字幕显示
     subtitleClearTimer->stop();
     subtitleClearTimer->start(5000);
@@ -658,8 +697,9 @@ void MediaWindow::setupUI()
     // 创建横排字幕 Label
     subtitleLabel = new QLabel(overlayContainer);
     subtitleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-    subtitleLabel->setStyleSheet("background-color: transparent; color: white; font-size: 18px;");
+    subtitleLabel->setStyleSheet("background-color: transparent; color: white;");
     subtitleLabel->setAlignment(Qt::AlignCenter);
+    subtitleLabel->setWordWrap(true);
     subtitleLabel->setParent(overlayContainer);
     subtitleLabel->raise();
     subtitleLabel->hide();
