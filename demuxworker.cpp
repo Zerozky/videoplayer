@@ -624,10 +624,11 @@ void DemuxWorker::slotDoWork()
                                 img.setPixel(x, y, color);
                             }
                         }
-                        // 转换为无 alpha 的格式测试
-                        // QImage showImg = img.convertToFormat(QImage::Format_RGB32);
+                        // 取 PGS 帧里给的显示时长（ms）
+                        int duration = static_cast<int>(subtitle.end_display_time - subtitle.start_display_time);
+                        duration = qMax(duration, 5000);
                         // 发射图像字幕信号
-                        emit sigSubtitleImage(img);
+                        emit sigSubtitleImage(img, duration);
                         qDebug() << "发射图像字幕信号";
                     }
                     // 如果是 ASS 字幕（或普通文本字幕）

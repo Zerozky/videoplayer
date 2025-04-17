@@ -59,10 +59,18 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(selectStreamButton, &QPushButton::clicked, this, &MediaWindow::onSelectStreamButtonClicked);
     // connect(loadSubtitleButton, &QPushButton::clicked, this, &MediaWindow::onLoadSubtitleButtonClicked);
 
+    // —— 横排清除 ——
     subtitleClearTimer = new QTimer(this);
     subtitleClearTimer->setSingleShot(true);
     connect(subtitleClearTimer, &QTimer::timeout, this, [this]() {
         subtitleLabel->clear();
+    });
+
+    // —— 竖排清除 ——
+    verticalClearTimer = new QTimer(this);
+    verticalClearTimer->setSingleShot(true);
+    connect(verticalClearTimer, &QTimer::timeout, this, [this]() {
+        verticalSubtitleLabel->clear();
     });
 }
 
@@ -170,24 +178,32 @@ void MediaWindow::openFile()
 
 void MediaWindow::togglePlayPause()
 {
-    if (demuxWorker)
-    {
-        // 切换暂停状态
-        demuxWorker->pauseMutex.lock();
-        demuxWorker->isPause = !demuxWorker->isPause;
-        qDebug() << "togglePlayPause: isPause =" << demuxWorker->isPause;
-        // 如果从暂停恢复，唤醒解码线程并重置计时器基准
-        if(!demuxWorker->isPause) {
-            demuxWorker->pauseCondition.wakeAll();
-        }
-        demuxWorker->pauseMutex.unlock();
+    if (!demuxWorker) return;
 
-        // 更新按钮文本
-        if(demuxWorker->isPause)
-            playButton->setText("Play");
-        else
-            playButton->setText("Pause");
+    // 切换暂停状态
+    demuxWorker->pauseMutex.lock();
+    demuxWorker->isPause = !demuxWorker->isPause;
+    // 如果从暂停恢复，唤醒解码线程并重置计时器基准
+    if(!demuxWorker->isPause) {
+        demuxWorker->pauseCondition.wakeAll();
     }
+    demuxWorker->pauseMutex.unlock();
+
+    // —— 新增：暂停时 stop() 并记下剩余；恢复时 restart() ——
+    if (demuxWorker->isPause) {
+        pausedSubtitleRemaining = subtitleClearTimer->remainingTime();
+        subtitleClearTimer->stop();
+        pausedVerticalRemaining = verticalClearTimer->remainingTime();
+        verticalClearTimer->stop();
+    } else {
+        if (pausedSubtitleRemaining > 0)
+            subtitleClearTimer->start(pausedSubtitleRemaining);
+        if (pausedVerticalRemaining > 0)
+            verticalClearTimer->start(pausedVerticalRemaining);
+    }
+
+    // 更新按钮文本
+    playButton->setText(demuxWorker->isPause ? "Play" : "Pause");
 }
 
 void MediaWindow::updateTimeLabel(double currentTime, double totalTime)
@@ -508,7 +524,7 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
     subtitleClearTimer->start(5000);
 }
 
-void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage)
+void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int durationMs)
 {
     if (subtitleImage.isNull())
         return;
@@ -528,7 +544,7 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage)
 
     QPixmap pix;
     if (isVertical) {
-        // —— 竖排处理：占用 80% 高度，5% 宽度
+        // —— 竖排处理：占用 80% 高度，5% 宽度，右侧居中
         constexpr double maxHRatio = 0.8;
         constexpr double maxWRatio = 0.05;
         int maxH = int(containerH * maxHRatio);
@@ -549,10 +565,20 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage)
         int margin = 50;
         int x = containerW - pix.width() - margin;
         int y = (containerH - pix.height()) / 2;
-        subtitleLabel->setGeometry(x, y, pix.width(), pix.height());
+
+        verticalSubtitleLabel->setGeometry(x, y, pix.width(), pix.height());
+        verticalSubtitleLabel->setPixmap(pix);
+        verticalSubtitleLabel->setScaledContents(false);
+        verticalSubtitleLabel->show();
+        verticalSubtitleLabel->raise();
+
+        // 设定延时自动清除竖排字幕
+        verticalClearTimer->stop();
+        verticalClearTimer->start(durationMs);
     }
     else {
-        // —— 横排处理：保持之前的 bottom‑center + 80% 宽度 + 10% 高度 限制
+        // 横排处理：占用 80% 宽度，10% 高度，底部居中
+
         // 全局缩放比例（基于原始视频宽度）
         double globalScale = double(containerW) / videoWidth;
 
@@ -590,16 +616,15 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage)
         int x = (containerW - pix.width()) / 2;
         int y = containerH - pix.height() - 20;
         subtitleLabel->setGeometry(x, y, pix.width(), pix.height());
+        subtitleLabel->setPixmap(pix);
+        subtitleLabel->setScaledContents(false);
+        subtitleLabel->show();
+        subtitleLabel->raise();
+
+        // 重置横排定时
+        subtitleClearTimer->stop();
+        subtitleClearTimer->start(durationMs);
     }
-
-    subtitleLabel->setPixmap(pix);
-    subtitleLabel->setScaledContents(false);
-    subtitleLabel->raise();
-    subtitleLabel->show();
-
-    // 设定延时自动清除字幕显示
-    subtitleClearTimer->stop();
-    subtitleClearTimer->start(5000);
 }
 
 void MediaWindow::setupUI()
@@ -630,18 +655,22 @@ void MediaWindow::setupUI()
     stackedLayout->addWidget(videoLabel);
 #endif
 
-    // 创建字幕 Label（放在顶层，透明背景）
+    // 创建横排字幕 Label
     subtitleLabel = new QLabel(overlayContainer);
     subtitleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
     subtitleLabel->setStyleSheet("background-color: transparent; color: white; font-size: 18px;");
     subtitleLabel->setAlignment(Qt::AlignCenter);
-    subtitleLabel->setText("");
-    // 初始设置固定位置（后面在 resizeEvent 中更新）
     subtitleLabel->setParent(overlayContainer);
     subtitleLabel->raise();
-    subtitleLabel->hide();  // 先隐藏，等有图再 show()
-    // 添加字幕 Label 到叠加布局
-    // stackedLayout->addWidget(subtitleLabel);
+    subtitleLabel->hide();
+
+    // 创建竖排字幕 Label
+    verticalSubtitleLabel = new QLabel(overlayContainer);
+    verticalSubtitleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    verticalSubtitleLabel->setStyleSheet("background-color: transparent; color: white; font-size: 18px;");
+    verticalSubtitleLabel->setParent(overlayContainer);
+    verticalSubtitleLabel->hide();
+    verticalSubtitleLabel->raise();
 
     // 创建 videoFrame，将 overlayContainer 放入其中
     videoFrame = new QFrame();
