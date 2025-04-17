@@ -554,7 +554,11 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText, int durationM
     // 设置文字和样式
     subtitleLabel->setWordWrap(true);
     QFont font = subtitleLabel->font();
+#ifdef Q_OS_MAC
+    font.setPointSize(38);
+#else
     font.setPointSize(20);
+#endif
     subtitleLabel->setFont(font);
 
     // 创建一个阴影效果对象
