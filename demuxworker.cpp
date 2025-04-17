@@ -416,7 +416,7 @@ void DemuxWorker::slotDoWork()
         audioSink = new QAudioSink(defaultDevice, format);
         audioSink->setVolume(1.0);
         // 设置较大的缓冲区
-        audioSink->setBufferSize(100 * 1024);
+        audioSink->setBufferSize(300 * 1024);
         // 获取 QIODevice 用于写入音频数据
         audioDevice = audioSink->start();
         m_audioSink = audioSink;
