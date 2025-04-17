@@ -149,6 +149,7 @@ private:
     int selectedVideoStream;
     int selectedAudioStream;
     int selectedSubtitleStream;
+    QTimer *subtitleClearTimer;
 
     void resizeEvent(QResizeEvent *event);
 

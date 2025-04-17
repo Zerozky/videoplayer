@@ -1,7 +1,7 @@
 #ifndef CUDAVIDEOWINDOW_H
 #define CUDAVIDEOWINDOW_H
 
-#include <QOpenGLWindow>
+#include <QOpenGLWidget>
 #include <QOpenGLFunctions>
 #include <QMutex>
 #ifdef Q_OS_WIN
@@ -9,11 +9,11 @@
 #include <cuda_gl_interop.h>
 #endif
 
-class CudaVideoWindow : public QOpenGLWindow, protected QOpenGLFunctions
+class CudaVideoWindow : public QOpenGLWidget, protected QOpenGLFunctions
 {
     Q_OBJECT
 public:
-    explicit CudaVideoWindow(QWindow *parent = nullptr);
+    explicit CudaVideoWindow(QWidget *parent = nullptr);
     ~CudaVideoWindow();
 
     // 更新纹理数据，要求 data 格式为 RGBA（每像素4字节）

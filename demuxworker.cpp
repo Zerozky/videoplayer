@@ -602,23 +602,30 @@ void DemuxWorker::slotDoWork()
                     // 如果是图像字幕（例如 PGS）
                     if (rect->type == SUBTITLE_BITMAP) {
                         int w = rect->w, h = rect->h;
-                        if (w <= 0 || h <= 0 || !rect->data[0] || !rect->data[1]) {
+                        // 判断尺寸、索引图和调色板是否有效，同时检查调色板颜色数量
+                        if (w <= 0 || h <= 0 || !rect->data[0] || rect->nb_colors <= 0 || !rect->data[1]) {
                             continue;
                         }
                         // 创建一个 QImage 格式为 ARGB32
                         QImage img(w, h, QImage::Format_ARGB32);
-                        // 对于每个像素，根据 rect->linesize[0] 获取索引值，然后查找对应颜色
+                        // 将调色板指针转换为 uint32_t*，因为每个颜色占 4 字节
+                        uint32_t *palette = reinterpret_cast<uint32_t*>(rect->data[1]);
+                        // 对于每个像素，根据索引图获取索引值，然后查找对应颜色
                         for (int y = 0; y < h; y++) {
                             for (int x = 0; x < w; x++) {
                                 // 这里假设 rect->linesize[0] 存在且有效
                                 int index = rect->data[0][y * rect->linesize[0] + x];
+                                // 检查 index 是否在调色板范围内
+                                if (index < 0 || index >= rect->nb_colors) {
+                                    continue;
+                                }
                                 // 注意：rect->colors 中的颜色通常存储为 ARGB 值
-                                uint32_t color = rect->data[1][index];
+                                uint32_t color = palette[index];
                                 img.setPixel(x, y, color);
                             }
                         }
                         // 转换为无 alpha 的格式测试
-                        QImage showImg = img.convertToFormat(QImage::Format_RGB32);
+                        // QImage showImg = img.convertToFormat(QImage::Format_RGB32);
                         // 发射图像字幕信号
                         emit sigSubtitleImage(img);
                         qDebug() << "发射图像字幕信号";

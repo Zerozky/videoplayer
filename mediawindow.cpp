@@ -23,6 +23,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QComboBox>
+#include <QStackedLayout>
 extern "C" {
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
@@ -58,6 +59,11 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(selectStreamButton, &QPushButton::clicked, this, &MediaWindow::onSelectStreamButtonClicked);
     // connect(loadSubtitleButton, &QPushButton::clicked, this, &MediaWindow::onLoadSubtitleButtonClicked);
 
+    subtitleClearTimer = new QTimer(this);
+    subtitleClearTimer->setSingleShot(true);
+    connect(subtitleClearTimer, &QTimer::timeout, this, [this]() {
+        subtitleLabel->clear();
+    });
 }
 
 MediaWindow::~MediaWindow()
@@ -496,26 +502,104 @@ void MediaWindow::onSelectStreamButtonClicked()
 void MediaWindow::slotDisplaySubtitle(const QString &subtitleText)
 {
     subtitleLabel->setText(subtitleText);
+    subtitleLabel->show();
     // 设定延时自动清除字幕显示
-    if (!subtitleText.isEmpty()) {
-        QTimer::singleShot(5000, this, [this]() {
-            subtitleLabel->clear();
-        });
-    }
+    subtitleClearTimer->stop();
+    subtitleClearTimer->start(5000);
 }
 
 void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage)
 {
-    QPixmap pix = QPixmap::fromImage(subtitleImage);
-    // 如果收到图像字幕，则转换为 QPixmap 后显示
+    if (subtitleImage.isNull())
+        return;
+
+    // overlay 容器大小
+    QWidget *overlay = videoFrame->layout()->itemAt(0)->widget();
+    int containerW = overlay->width();
+    int containerH = overlay->height();
+
+    // 原始字幕图片尺寸
+    int origW = subtitleImage.width();
+    int origH = subtitleImage.height();
+
+    // 判断竖排：只有当高度明显大于宽度时才视为竖排
+    constexpr double verticalThreshold = 1.2;
+    bool isVertical = (origH > origW * verticalThreshold);
+
+    QPixmap pix;
+    if (isVertical) {
+        // —— 竖排处理：占用 80% 高度，5% 宽度
+        constexpr double maxHRatio = 0.8;
+        constexpr double maxWRatio = 0.05;
+        int maxH = int(containerH * maxHRatio);
+        int maxW = int(containerW * maxWRatio);
+
+        QSize targetSize = QSize(origW, origH)
+                               .scaled(maxW, maxH, Qt::KeepAspectRatio);
+
+        pix = QPixmap::fromImage(
+            subtitleImage.scaled(
+                targetSize,
+                Qt::KeepAspectRatio,
+                Qt::SmoothTransformation
+                )
+            );
+
+        // 右侧居中放置，距右边留 10px
+        int margin = 50;
+        int x = containerW - pix.width() - margin;
+        int y = (containerH - pix.height()) / 2;
+        subtitleLabel->setGeometry(x, y, pix.width(), pix.height());
+    }
+    else {
+        // —— 横排处理：保持之前的 bottom‑center + 80% 宽度 + 10% 高度 限制
+        // 全局缩放比例（基于原始视频宽度）
+        double globalScale = double(containerW) / videoWidth;
+
+        // 先按全局缩放，只缩小不放大
+        int targetW = qMin(int(origW * globalScale), origW);
+        int targetH = qMin(int(origH * globalScale), origH);
+
+        // 宽度不超 80%
+        constexpr double maxWidthRatio = 0.85;
+        int maxW = int(containerW * maxWidthRatio);
+        if (targetW > maxW) {
+            double r = double(maxW) / targetW;
+            targetW = int(targetW * r);
+            targetH = int(targetH * r);
+        }
+
+        // 高度不超 10%
+        constexpr double maxHeightRatio = 0.15;
+        int maxH = int(containerH * maxHeightRatio);
+        if (targetH > maxH) {
+            double r = double(maxH) / targetH;
+            targetH = int(targetH * r);
+            targetW = int(targetW * r);
+        }
+
+        pix = QPixmap::fromImage(
+            subtitleImage.scaled(
+                QSize(targetW, targetH),
+                Qt::KeepAspectRatio,
+                Qt::SmoothTransformation
+                )
+            );
+
+        // 底部居中，距底部 10px
+        int x = (containerW - pix.width()) / 2;
+        int y = containerH - pix.height() - 20;
+        subtitleLabel->setGeometry(x, y, pix.width(), pix.height());
+    }
+
     subtitleLabel->setPixmap(pix);
-    // 确保字幕层在父控件的最上层，并显示出来
+    subtitleLabel->setScaledContents(false);
     subtitleLabel->raise();
     subtitleLabel->show();
+
     // 设定延时自动清除字幕显示
-    QTimer::singleShot(5000, this, [this]() {
-        subtitleLabel->clear();
-    });
+    subtitleClearTimer->stop();
+    subtitleClearTimer->start(5000);
 }
 
 void MediaWindow::setupUI()
@@ -524,10 +608,51 @@ void MediaWindow::setupUI()
     mainSplitter = new QSplitter(Qt::Horizontal, this);
     leftSplitter = new QSplitter(Qt::Vertical);
 
-    // 创建左侧两个区域 Frame
-    videoFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    videoFrame->setAttribute(Qt::WA_NativeWindow);
+    // 创建一个专门的 QWidget 用作视频和字幕叠加的容器
+    QWidget *overlayContainer = new QWidget(this);
+    overlayContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    QStackedLayout *stackedLayout = new QStackedLayout(overlayContainer);
+    // 设置叠加模式，让所有子控件同时显示
+    stackedLayout->setStackingMode(QStackedLayout::StackAll);
+
+    // 视频显示区域
+#ifdef Q_OS_WIN
+    // 创建 CudaVideoWindow
+    cudaVideoWindow = new CudaVideoWindow(overlayContainer);
+    // 添加视频 widget 到叠加布局底层
+    stackedLayout->addWidget(cudaVideoWindow);
+#else
+    videoLabel = new QLabel(overlayContainer);
+    videoLabel->setAttribute(Qt::WA_NativeWindow);
+    videoLabel->setAlignment(Qt::AlignCenter);
+    videoLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    videoLabel->setStyleSheet("background-color: black;");
+    stackedLayout->addWidget(videoLabel);
+#endif
+
+    // 创建字幕 Label（放在顶层，透明背景）
+    subtitleLabel = new QLabel(overlayContainer);
+    subtitleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    subtitleLabel->setStyleSheet("background-color: transparent; color: white; font-size: 18px;");
+    subtitleLabel->setAlignment(Qt::AlignCenter);
+    subtitleLabel->setText("");
+    // 初始设置固定位置（后面在 resizeEvent 中更新）
+    subtitleLabel->setParent(overlayContainer);
+    subtitleLabel->raise();
+    subtitleLabel->hide();  // 先隐藏，等有图再 show()
+    // 添加字幕 Label 到叠加布局
+    // stackedLayout->addWidget(subtitleLabel);
+
+    // 创建 videoFrame，将 overlayContainer 放入其中
+    videoFrame = new QFrame();
+    QVBoxLayout *frameLayout = new QVBoxLayout(videoFrame);
+    frameLayout->setContentsMargins(0, 0, 0, 0);
+    frameLayout->addWidget(overlayContainer);
+
+    // 控制面板区域
     controlFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    //控制面板
+    setupControlPanel();
 
     // 创建右侧区域使用 QTabWidget
     rightTabWidget = new QTabWidget(this);
@@ -551,55 +676,14 @@ void MediaWindow::setupUI()
     deepSeekPage->setLayout(deepSeekLayout);
     rightTabWidget->addTab(deepSeekPage, tr("DeepSeek"));
 
-    // 视频显示区域
-#ifdef Q_OS_WIN
-    // 创建 CudaVideoWindow，并通过 createWindowContainer 嵌入到 QWidget 中
-    cudaVideoWindow = new CudaVideoWindow();
-    QWidget *videoContainer = QWidget::createWindowContainer(cudaVideoWindow, this);
-    videoContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    QVBoxLayout *videoLayout = new QVBoxLayout;
-    videoLayout->setContentsMargins(0,0,0,0);
-    videoLayout->addWidget(videoContainer);
-    // 使用 Frame 存放 cudaVideoWidget
-    videoFrame = new QFrame();
-    videoFrame->setLayout(videoLayout);
-#else
-    videoLabel = new QLabel();
-    videoLabel->setAttribute(Qt::WA_NativeWindow);
-    videoLabel->setAlignment(Qt::AlignCenter);
-    videoLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-    videoLabel->setStyleSheet("background-color: black;");
-    QVBoxLayout *videoLayout = new QVBoxLayout;
-    videoLayout->setContentsMargins(0, 0, 0, 0);
-    videoLayout->addWidget(videoLabel);
-    videoFrame = new QFrame();
-    videoFrame->setLayout(videoLayout);
-#endif
-
-    // 在 videoFrame 上添加字幕显示层
-    // 注意：这里直接以绝对定位实现，后续在窗口 resizeEvent 中更新位置
-    subtitleLabel = new QLabel(videoFrame);
-    subtitleLabel->setStyleSheet("color: white; background-color: rgba(0,0,0,128); font-size: 18px;");
-    subtitleLabel->setAlignment(Qt::AlignCenter);
-    subtitleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-    // 初始位置设置在视频区域底部，宽度和 videoFrame 保持一致，高度设定为 50 像素
-    subtitleLabel->setGeometry(0, videoFrame->height() - 50, videoFrame->width(), 50);
-    subtitleLabel->raise(); // 确保在最上层显示
-
-    //控制面板
-    setupControlPanel();
-
-    // 组装 Splitter
+    // 组装主界面：左侧为视频+控制，右侧为其他页面
     leftSplitter->addWidget(videoFrame);
     leftSplitter->addWidget(controlFrame);
-
     mainSplitter->addWidget(leftSplitter);
     mainSplitter->addWidget(rightTabWidget);
-
     // 设置 Splitter 拉伸
     leftSplitter->setStretchFactor(0, 10);
     leftSplitter->setStretchFactor(1, 1);
-
     mainSplitter->setStretchFactor(0, 8);
     mainSplitter->setStretchFactor(1, 2);
 
@@ -608,6 +692,7 @@ void MediaWindow::setupUI()
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->addWidget(mainSplitter);
 
+    setLayout(mainLayout);
     this->setMinimumSize(800, 600);
 }
 
@@ -703,10 +788,18 @@ QString MediaWindow::getStreamDescription(AVStream *stream)
 void MediaWindow::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
-    if (videoFrame && subtitleLabel) {
-        // 将字幕 Label 设置到 videoFrame 底部
-        subtitleLabel->setGeometry(0, videoFrame->height() - 50, videoFrame->width(), 50);
-        subtitleLabel->raise();
+    // 假设 videoFrame 的布局中只有一个 overlayContainer
+    if (!subtitleLabel->pixmap().isNull()) {
+        QWidget *overlay = videoFrame->layout()->itemAt(0)->widget();
+        int containerW = overlay->width();
+        int containerH = overlay->height();
+        const QPixmap &pix = subtitleLabel->pixmap();
+        int w = pix.width();
+        int h = pix.height();
+
+        int x = (containerW - w) / 2;
+        int y = containerH - h - 10;
+        subtitleLabel->setGeometry(x, y, w, h);
     }
 }
 

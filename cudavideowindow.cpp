@@ -6,8 +6,8 @@
 #include <cuda_gl_interop.h>
 #endif
 
-CudaVideoWindow::CudaVideoWindow(QWindow *parent)
-    : QOpenGLWindow(NoPartialUpdate, parent)
+CudaVideoWindow::CudaVideoWindow(QWidget *parent)
+    : QOpenGLWidget(parent)
 #ifdef Q_OS_WIN
     , m_texture(0)
     , m_cudaResource(nullptr)
@@ -15,7 +15,7 @@ CudaVideoWindow::CudaVideoWindow(QWindow *parent)
     , m_frameWidth(0)
     , m_frameHeight(0)
 {
-    // 可以用 createWindowContainer() 包裹并嵌入到 QWidget 中
+
 }
 
 CudaVideoWindow::~CudaVideoWindow()
@@ -115,7 +115,9 @@ void CudaVideoWindow::resizeGL(int w, int h)
 void CudaVideoWindow::updateFrame(const uint8_t *data, int width, int height)
 {
 #ifdef Q_OS_WIN
+    makeCurrent();
     QMutexLocker locker(&m_mutex);
+
     // 如果尺寸变化，则重新分配纹理
     if (width != m_frameWidth || height != m_frameHeight) {
         m_frameWidth = width;
@@ -135,23 +137,30 @@ void CudaVideoWindow::updateFrame(const uint8_t *data, int width, int height)
         cudaError_t err = cudaGraphicsGLRegisterImage(&m_cudaResource, m_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
         if (err != cudaSuccess) {
             qDebug() << "Re-registration of CUDA resource failed:" << cudaGetErrorString(err);
+            doneCurrent();
             return;
         }
     }
     if (!m_cudaResource) {
         qDebug() << "m_cudaResource is invalid (null)";
+        doneCurrent();
         return;
     }
+
+    // 映射 CUDA 资源
     cudaError_t err = cudaGraphicsMapResources(1, &m_cudaResource, 0);
     if (err != cudaSuccess) {
         qDebug() << "cudaGraphicsMapResources failed:" << cudaGetErrorString(err);
+        doneCurrent();
         return;
     }
+
     cudaArray_t array;
     err = cudaGraphicsSubResourceGetMappedArray(&array, m_cudaResource, 0, 0);
     if (err != cudaSuccess) {
         qDebug() << "cudaGraphicsSubResourceGetMappedArray failed:" << cudaGetErrorString(err);
         cudaGraphicsUnmapResources(1, &m_cudaResource, 0);
+        doneCurrent();
         return;
     }
     size_t pitch = m_frameWidth * 4; // 每像素4字节（RGBA）
@@ -164,6 +173,7 @@ void CudaVideoWindow::updateFrame(const uint8_t *data, int width, int height)
     cudaStreamSynchronize(m_stream);
     cudaGraphicsUnmapResources(1, &m_cudaResource, 0);
     update(); // 触发重绘
+    doneCurrent();
 #endif
 }
 
