@@ -115,7 +115,6 @@ private:
     QLabel* verticalSubtitleLabel;   // 竖排字幕
 
     QPushButton *toggleControlPanelButton; // 打开/隐藏控制面板
-    QPushButton *togglePlaylistButton;     // 打开/关闭播放列表
 
     void setupUI();
     void setupControlPanel();

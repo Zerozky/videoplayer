@@ -505,6 +505,14 @@ void DemuxWorker::slotDoWork()
                     pauseTotal = 0;
                     currentPlaybackTime = targetTime;
                     lastSeekTimeSec = targetTime;
+
+                    // 在 seek 后重置外挂 ASS 事件索引
+                    qint64 nowMs = qint64(targetTime * 1000);
+                    externalEventIndex = 0;
+                    while (externalEventIndex < externalEvents.size()
+                           && externalEvents[externalEventIndex].endMs < nowMs) {
+                        ++externalEventIndex;
+                    }
                 }
                 pendingSeekTime = -1;
                 pendingSeekOffset = 0;

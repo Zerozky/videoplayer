@@ -1012,10 +1012,8 @@ void MediaWindow::setupControlPanel()
 
     // 控制面板开关按钮
     toggleControlPanelButton = new QPushButton("Hide Control Panel", controlFrame);
-    togglePlaylistButton = new QPushButton("Close Playlist", controlFrame);
 
     row2Layout->addWidget(toggleControlPanelButton);
-    row2Layout->addWidget(togglePlaylistButton);
 
     controlLayout->addLayout(row2Layout);
 }
