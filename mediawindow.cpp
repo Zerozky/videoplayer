@@ -252,6 +252,12 @@ void MediaWindow::onProgressSliderReleased()
     if(totalDuration > 0) {
         double newPos = (static_cast<double>(progressSlider->value()) / progressSlider->maximum()) * totalDuration;
         emit sigSeekTo(newPos);
+
+        // 清除所有现存字幕
+        subtitleClearTimer->stop();
+        subtitleLabel->hide();
+        verticalClearTimer->stop();
+        verticalSubtitleLabel->hide();
     }
     sliderBeingDragged = false;
 }
@@ -624,6 +630,12 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int dura
     QPixmap pix;
     if (isVertical) {
         // —— 竖排处理：占用 80% 高度，5% 宽度，右侧居中
+
+        // 清除竖排旧字幕
+        verticalSubtitleLabel->hide();
+        verticalSubtitleLabel->clear();
+        verticalClearTimer->stop();
+
         constexpr double maxHRatio = 0.8;
         constexpr double maxWRatio = 0.05;
         int maxH = int(containerH * maxHRatio);
@@ -651,12 +663,16 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int dura
         verticalSubtitleLabel->show();
         verticalSubtitleLabel->raise();
 
-        // 设定延时自动清除竖排字幕
-        verticalClearTimer->stop();
+        // 延时自动清除竖排字幕
         verticalClearTimer->start(durationMs);
     }
     else {
         // 横排处理：占用 80% 宽度，10% 高度，底部居中
+
+        // 清除横排旧字幕
+        subtitleLabel->hide();
+        subtitleLabel->clear();
+        subtitleClearTimer->stop();
 
         // 全局缩放比例（基于原始视频宽度）
         double globalScale = double(containerW) / videoWidth;
@@ -701,7 +717,6 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int dura
         subtitleLabel->raise();
 
         // 重置横排定时
-        subtitleClearTimer->stop();
         subtitleClearTimer->start(durationMs);
     }
 }
