@@ -380,6 +380,21 @@ void MediaWindow::onVideoListDoubleClicked(QListWidgetItem *item)
             demuxWorker->moveToThread(demuxThread);
             setupConnections();
             emit sigSetFilePath(selectedFilePath);
+
+            QFileInfo fi(selectedFilePath);
+            QString base = fi.absolutePath() + "/" + fi.completeBaseName();
+            QString chs = base + ".chs.ass";
+            QString cht = base + ".cht.ass";
+            if (QFile::exists(chs)) {
+                demuxWorker->setExternalSubtitle(chs);
+                qDebug() << "自动加载简体字幕：" << chs;
+            }
+            else if (QFile::exists(cht)) {
+                demuxWorker->setExternalSubtitle(cht);
+                qDebug() << "自动加载繁体字幕：" << cht;
+            }
+
+
             startPlay();
         }
     }
