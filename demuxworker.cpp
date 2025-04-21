@@ -488,10 +488,23 @@ void DemuxWorker::slotDoWork()
                         avcodec_flush_buffers(pVideoCodecContext);
                     if (pAudioCodecContext)
                         avcodec_flush_buffers(pAudioCodecContext);
+                    if (pSubtitleCodecContext) {
+                        avcodec_flush_buffers(pSubtitleCodecContext);
+                        qDebug() << "Subtitle decoder flushed after seek.";
+                    }
+
+                    // 重置音频输出设备，丢弃所有已排队但未播放的 PCM 数据
+                    if (m_audioSink) {
+                        m_audioSink->reset();
+                        // 重新 start() 会返回新的 QIODevice，用于后续写数据
+                        audioDevice = m_audioSink->start();
+                        qDebug() << "Audio sink reset after seek.";
+                    }
                     // 重置计时器，使 effectiveTime 立刻匹配 targetTime：
                     startTime = timer.elapsed() - static_cast<qint64>(targetTime * 1000);
                     pauseTotal = 0;
                     currentPlaybackTime = targetTime;
+                    lastSeekTimeSec = targetTime;
                 }
                 pendingSeekTime = -1;
                 pendingSeekOffset = 0;
@@ -579,6 +592,15 @@ void DemuxWorker::slotDoWork()
                 double effectiveTime = (timer.elapsed() - startTime - pauseTotal) / 1000.0;
                 double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
                 currentPlaybackTime = currentPts;  // 更新当前播放时间
+                // 丢掉 seek 前的视频帧
+                if (lastSeekTimeSec > 0.0) {
+                    if (currentPlaybackTime < lastSeekTimeSec) {
+                        av_frame_unref(sw_frame);
+                        continue;
+                    } else {
+                        lastSeekTimeSec = -1.0;
+                    }
+                }
                 emit sigUpdateTime(currentPts, totalDuration);  // 发射当前时间和总时长
 
                 //  外挂 ASS 事件触发
@@ -614,6 +636,17 @@ void DemuxWorker::slotDoWork()
             }
 
             while (avcodec_receive_frame(pAudioCodecContext, pFrame) == 0) {
+                // 丢掉 seek 前的音频帧
+                double audioPts = pFrame->pts * av_q2d(avFormatContext->streams[audioStream]->time_base);
+                if (lastSeekTimeSec > 0.0) {
+                    if (audioPts < lastSeekTimeSec) {
+                        av_frame_unref(pFrame);
+                        continue;
+                    } else {
+                        lastSeekTimeSec = -1.0;
+                    }
+                }
+
                 // 进行音频重采样并写入音频设备
                 AVFrame *resampledFrame = av_frame_alloc();
                 if (!resampledFrame) {

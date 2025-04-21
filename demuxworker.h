@@ -80,6 +80,8 @@ private:
     struct SubtitleEvent { qint64 startMs, endMs; QString text; };
     std::vector<SubtitleEvent> externalEvents;
     size_t externalEventIndex = 0;
+
+    double lastSeekTimeSec = -1.0;
 };
 
 #endif // DEMUXWORKER_H
