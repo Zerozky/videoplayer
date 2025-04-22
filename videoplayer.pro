@@ -11,12 +11,14 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    controlpaneldialog.cpp \
     cudavideowindow.cpp \
     demuxworker.cpp \
     main.cpp \
     mediawindow.cpp
 
 HEADERS += \
+    controlpaneldialog.h \
     cudavideowindow.h \
     demuxworker.h \
     mediawindow.h

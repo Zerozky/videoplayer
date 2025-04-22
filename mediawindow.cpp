@@ -39,6 +39,10 @@ MediaWindow::MediaWindow(QWidget *parent) :
     setupUI();
     setupConnections();
 
+    // —— 新增：创建并隐藏控制面板对话框 ——
+    controlDialog = new ControlPanelDialog(this);
+    controlDialog->hide();
+
     // 按钮连接
     connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
     connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
@@ -74,6 +78,39 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(verticalClearTimer, &QTimer::timeout, this, [this]() {
         verticalSubtitleLabel->clear();
     });
+
+    // 点击按钮弹出/隐藏
+    connect(toggleControlPanelButton, &QPushButton::clicked, this, [this](){
+        if (controlDialog->isVisible()) {
+            controlDialog->hide();
+            toggleControlPanelButton->setText(tr("Show Control Panel"));
+        } else {
+            controlDialog->move(this->geometry().center() - controlDialog->rect().center());
+            controlDialog->show();
+            toggleControlPanelButton->setText(tr("Hide Control Panel"));
+        }
+    });
+
+    // —— 新增：把 ControlPanelDialog 的信号连到现有槽 ——
+    connect(controlDialog, &ControlPanelDialog::seekRelative,
+            this, [this](double off){ emit sigSeekRelative(off); });
+
+    // // 倍速
+    // connect(controlDialog, &ControlPanelDialog::setPlaybackSpeed,
+    //         demuxWorker,   &DemuxWorker::setPlaybackSpeed, Qt::QueuedConnection);
+
+    // 字幕字体/字号
+    connect(controlDialog, &ControlPanelDialog::subtitleFontChanged, this, [this](const QFont &f){
+        subtitleLabel->setFont(f);
+        verticalSubtitleLabel->setFont(f);
+    });
+    connect(controlDialog, &ControlPanelDialog::subtitleFontSizeChanged, this, [this](int sz){
+        QFont f = subtitleLabel->font();
+        f.setPointSize(sz);
+        subtitleLabel->setFont(f);
+        verticalSubtitleLabel->setFont(f);
+    });
+
 }
 
 MediaWindow::~MediaWindow()

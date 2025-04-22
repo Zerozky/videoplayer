@@ -19,6 +19,7 @@
 #include "demuxworker.h"
 #ifdef Q_OS_WIN
 #include "cudavideowindow.h"
+#include "controlpaneldialog.h"
 #endif
 extern "C"
 {
@@ -115,6 +116,7 @@ private:
     QLabel* verticalSubtitleLabel;   // 竖排字幕
 
     QPushButton *toggleControlPanelButton; // 打开/隐藏控制面板
+    ControlPanelDialog *controlDialog;
 
     void setupUI();
     void setupControlPanel();
