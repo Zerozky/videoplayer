@@ -31,10 +31,12 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
 
     // — 第二行：倍速按钮 + 当前倍速显示
     QHBoxLayout *row2 = new QHBoxLayout;
+    QPushButton *btn05x = new QPushButton(tr("0.5×"), this);
     QPushButton *btn1x = new QPushButton(tr("1×"), this);
     QPushButton *btn15x = new QPushButton(tr("1.5×"), this);
     QPushButton *btn3x = new QPushButton(tr("3×"), this);
     QLabel    *lblSpeed = new QLabel(tr("Speed: 1.0×"), this);
+    row2->addWidget(btn05x);
     row2->addWidget(btn1x);
     row2->addWidget(btn15x);
     row2->addWidget(btn3x);
@@ -45,6 +47,7 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
     auto updateSpeedLabel = [lblSpeed](double s){
         lblSpeed->setText(QString("Speed: %1×").arg(s));
     };
+    connect(btn05x,  &QPushButton::clicked, this, [=]{ emit setPlaybackSpeed(0.5);  updateSpeedLabel(0.5);  });
     connect(btn1x,  &QPushButton::clicked, this, [=]{ emit setPlaybackSpeed(1.0);  updateSpeedLabel(1.0);  });
     connect(btn15x, &QPushButton::clicked, this, [=]{ emit setPlaybackSpeed(1.5);  updateSpeedLabel(1.5);  });
     connect(btn3x,  &QPushButton::clicked, this, [=]{ emit setPlaybackSpeed(3.0);  updateSpeedLabel(3.0);  });
@@ -67,5 +70,5 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
             this, &ControlPanelDialog::subtitleFontSizeChanged);
 
     // 设置固定宽度，方便 UI 排列
-    setFixedWidth(400);
+    setFixedWidth(500);
 }

@@ -18,6 +18,7 @@ extern "C"
 #include "libavutil/frame.h"
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libswresample/swresample.h>
 };
 
 class DemuxWorker : public QObject
@@ -52,6 +53,7 @@ public slots:
     void seekRelative(double offset);    // 相对跳转（例如快退/快进）
     void setVolume(double volume);       // 设置音量，0～1
     void setExternalSubtitle(const QString &path);
+    void setPlaybackSpeed(double speed);
 
 private:
     qint64 pauseAccumulated = 0; // 累计暂停的时间（毫秒）
@@ -65,11 +67,16 @@ private:
     AVFormatContext *m_avFormatContext = nullptr;
     AVCodecContext *m_videoCodecContext = nullptr;
     AVCodecContext *m_audioCodecContext = nullptr;
+    SwrContext *swrCtx = nullptr;
 
-    // 便于实时调整音量）
-    QAudioSink *m_audioSink = nullptr;
+    QAudioSink    *m_audioSink     = nullptr;      // 便于随时重建
+    QIODevice     *m_audioIO       = nullptr;      // 写入音频的设备
+    QAudioDevice   m_audioDevice;                  // 音频输出设备信息
+    QAudioFormat   m_audioFormat;                  // 原始音频格式（用于重建）
+    int            originalSampleRate = 0;         // 解码时的采样率
 
     double currentPlaybackTime = 0; // 保存当前播放时间（秒）
+    double playbackSpeed = 1.0;
 
     int selectedVideoStream = -1;
     int selectedAudioStream = -1;
@@ -82,6 +89,7 @@ private:
     size_t externalEventIndex = 0;
 
     double lastSeekTimeSec = -1.0;
+    double videoFrameRate      = 30.0;    // 视频流帧率（初始化时从流里读入）
 };
 
 #endif // DEMUXWORKER_H

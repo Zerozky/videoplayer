@@ -161,7 +161,6 @@ private:
     void resizeEvent(QResizeEvent *event);
 
     QString externalSubtitlePath;    // 保存外挂字幕文件路径
-
 };
 
 #endif // MEDIAWINDOW_H

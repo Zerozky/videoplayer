@@ -152,6 +152,36 @@ void DemuxWorker::setExternalSubtitle(const QString &path)
 
 }
 
+void DemuxWorker::setPlaybackSpeed(double speed)
+{
+    QMutexLocker locker(&seekMutex);
+    playbackSpeed = speed;
+    qDebug() << "Playback speed set to" << playbackSpeed;
+
+    // —— 1) Flush 解码器缓冲，丢掉所有未渲染帧 ——
+    if (m_videoCodecContext) avcodec_flush_buffers(m_videoCodecContext);
+    if (m_audioCodecContext) avcodec_flush_buffers(m_audioCodecContext);
+    if (swrCtx) swr_init(swrCtx);
+
+    // —— 2) 更新音频输出采样率，让硬件直接加速播放 ——
+    if (m_audioSink) {
+        m_audioSink->stop();
+        delete m_audioSink;
+        m_audioSink = nullptr;
+    }
+    QAudioFormat fmt = m_audioFormat;
+    fmt.setSampleRate(int(originalSampleRate * playbackSpeed));
+    m_audioSink = new QAudioSink(m_audioDevice, fmt);
+    m_audioSink->setVolume(1.0);
+    quint32 buf = quint32(originalSampleRate * 4 * 1);
+    m_audioSink->setBufferSize(buf);
+    m_audioIO = m_audioSink->start();
+
+    pendingSeekTime   = currentPlaybackTime;
+    pendingSeekOffset = 0;
+
+}
+
 void DemuxWorker::slotDoWork()
 {
     if (filePath.isEmpty())
@@ -167,16 +197,14 @@ void DemuxWorker::slotDoWork()
     AVCodecContext *pVideoCodecContext = nullptr;
     AVCodecContext *pAudioCodecContext = nullptr;
     AVCodecContext *pSubtitleCodecContext = nullptr;
-    SwrContext *swrCtx = nullptr;
-    QAudioSink *audioSink = nullptr;
-    QIODevice *audioDevice = nullptr;
+
 
     // 定义局部 lambda 统一清理
     auto cleanup = [&]() {
-        if (audioSink) {
-            audioSink->stop();
-            delete audioSink;
-            audioSink = nullptr;
+        if (m_audioSink) {
+            m_audioSink->stop();
+            delete m_audioSink;
+            m_audioSink = nullptr;
         }
         if (pVideoCodecContext) {
             avcodec_free_context(&pVideoCodecContext);
@@ -306,6 +334,14 @@ void DemuxWorker::slotDoWork()
     if(videoStream != -1)
     {
         pVideoCodecPara = avFormatContext->streams[videoStream]->codecpar;
+        AVStream *vstream = avFormatContext->streams[videoStream];
+        if (vstream->avg_frame_rate.num > 0) {
+            videoFrameRate = av_q2d(vstream->avg_frame_rate);
+        } else {
+            videoFrameRate = av_q2d(vstream->r_frame_rate);
+        }
+        qDebug() << "Detected videoFrameRate =" << videoFrameRate;
+
         // 1.分配编解码器上下文
         pVideoCodecContext =  avcodec_alloc_context3(nullptr);
         if (!pVideoCodecContext){
@@ -369,6 +405,7 @@ void DemuxWorker::slotDoWork()
             cleanup();
             return;
         }
+
         emit sigGetVideoInfo(pVideoCodecContext->width, pVideoCodecContext->height);
         qDebug() << "视频宽度:" << pVideoCodecContext->width << "高度:" << pVideoCodecContext->height;
     }
@@ -404,22 +441,20 @@ void DemuxWorker::slotDoWork()
         }
 
         // 获取默认音频设备
-        QAudioDevice defaultDevice = QMediaDevices::defaultAudioOutput();
-
+        m_audioDevice = QMediaDevices::defaultAudioOutput();
+        originalSampleRate = pAudioCodecContext->sample_rate;
         // 设置 Qt 音频格式
-        QAudioFormat format;
-        format.setSampleRate(pAudioCodecContext->sample_rate);
-        format.setChannelCount(2);
-        format.setSampleFormat(QAudioFormat::Int16);
+        m_audioFormat.setSampleRate(originalSampleRate);
+        m_audioFormat.setChannelCount(2);
+        m_audioFormat.setSampleFormat(QAudioFormat::Int16);
 
-        // 初始化 QAudioSink
-        audioSink = new QAudioSink(defaultDevice, format);
-        audioSink->setVolume(1.0);
-        // 设置较大的缓冲区
-        audioSink->setBufferSize(300 * 1024);
-        // 获取 QIODevice 用于写入音频数据
-        audioDevice = audioSink->start();
-        m_audioSink = audioSink;
+        // 创建并启动 QAudioSink
+        m_audioSink = new QAudioSink(m_audioDevice, m_audioFormat);
+        m_audioSink->setVolume(1.0);
+        quint32 buf = static_cast<quint32>(originalSampleRate * 4 * 1);
+        m_audioSink->setBufferSize(buf);
+        m_audioIO = m_audioSink->start();
+
         // 初始化 SwrContext（音频重采样）
         swrCtx = swr_alloc();
         if (!swrCtx) {
@@ -497,11 +532,11 @@ void DemuxWorker::slotDoWork()
                     if (m_audioSink) {
                         m_audioSink->reset();
                         // 重新 start() 会返回新的 QIODevice，用于后续写数据
-                        audioDevice = m_audioSink->start();
+                        m_audioIO = m_audioSink->start();
                         qDebug() << "Audio sink reset after seek.";
                     }
                     // 重置计时器，使 effectiveTime 立刻匹配 targetTime：
-                    startTime = timer.elapsed() - static_cast<qint64>(targetTime * 1000);
+                    startTime = timer.elapsed() - static_cast<qint64>((targetTime / playbackSpeed) * 1000);
                     pauseTotal = 0;
                     currentPlaybackTime = targetTime;
                     lastSeekTimeSec = targetTime;
@@ -597,7 +632,8 @@ void DemuxWorker::slotDoWork()
                 }
 
                 // 计算有效播放时间（秒）
-                double effectiveTime = (timer.elapsed() - startTime - pauseTotal) / 1000.0;
+                double wallSec = (timer.elapsed() - startTime - pauseTotal) / 1000.0;
+                double effectiveTime = wallSec * playbackSpeed;
                 double currentPts = pFrame->pts * av_q2d(avFormatContext->streams[videoStream]->time_base);
                 currentPlaybackTime = currentPts;  // 更新当前播放时间
                 // 丢掉 seek 前的视频帧
@@ -628,7 +664,14 @@ void DemuxWorker::slotDoWork()
                     QThread::msleep(static_cast<unsigned long>(delay * 1000));
                 }
 
-                emit sigGetFrame(sw_frame);
+                double threshold = 0.5 / (videoFrameRate * playbackSpeed);
+                if (playbackSpeed > 1.1 && currentPts + threshold < effectiveTime) {
+                    // 只有倍速播放时才丢帧
+                    av_frame_free(&sw_frame);
+                    qDebug() << "丢帧";
+                } else {
+                    emit sigGetFrame(sw_frame);
+                }
                 av_frame_unref(pFrame);
             }
         }
@@ -681,8 +724,8 @@ void DemuxWorker::slotDoWork()
                     1);
 
                 // 将数据写入 QAudioSink
-                if (audioDevice) {
-                    audioDevice->write((const char *)resampledFrame->data[0], dataSize);
+                if (m_audioIO) {
+                    m_audioIO->write((const char *)resampledFrame->data[0], dataSize);
                 }
 
                 av_frame_free(&resampledFrame);

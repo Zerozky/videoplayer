@@ -35,13 +35,12 @@ MediaWindow::MediaWindow(QWidget *parent) :
     QWidget(parent)
 {
     m_networkManager = new QNetworkAccessManager(this);
-
-    setupUI();
-    setupConnections();
-
     // —— 新增：创建并隐藏控制面板对话框 ——
     controlDialog = new ControlPanelDialog(this);
     controlDialog->hide();
+
+    setupUI();
+    setupConnections();
 
     // 按钮连接
     connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
@@ -95,9 +94,6 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(controlDialog, &ControlPanelDialog::seekRelative,
             this, [this](double off){ emit sigSeekRelative(off); });
 
-    // // 倍速
-    // connect(controlDialog, &ControlPanelDialog::setPlaybackSpeed,
-    //         demuxWorker,   &DemuxWorker::setPlaybackSpeed, Qt::QueuedConnection);
 
     // 字幕字体/字号
     connect(controlDialog, &ControlPanelDialog::subtitleFontChanged, this, [this](const QFont &f){
@@ -915,6 +911,10 @@ void MediaWindow::setupConnections()
     connect(demuxWorker, &DemuxWorker::sigSubtitleImage, this, &MediaWindow::slotDisplaySubtitleImage);
     connect(this, &MediaWindow::sigLoadExternalSubtitle,
             demuxWorker, &DemuxWorker::setExternalSubtitle);
+    // 倍速
+    connect(controlDialog, &ControlPanelDialog::setPlaybackSpeed,
+            demuxWorker,   &DemuxWorker::setPlaybackSpeed, Qt::QueuedConnection);
+
 }
 
 void MediaWindow::restartPlaybackAfterStreamSelection()
@@ -1010,7 +1010,7 @@ void MediaWindow::setupControlPanel()
     // 第一排：进度条 + 音量
     QHBoxLayout *row1Layout = new QHBoxLayout();
     progressSlider = createSlider(0, 1000, 0);
-    volumeSlider = createSlider(0, 100, 50);
+    volumeSlider = createSlider(0, 100, 100);
 
     row1Layout->addWidget(new QLabel("Progress:", controlFrame));
     row1Layout->addWidget(progressSlider, 1);
@@ -1048,7 +1048,7 @@ void MediaWindow::setupControlPanel()
     row2Layout->addWidget(codecInfoLabel);
 
     // 控制面板开关按钮
-    toggleControlPanelButton = new QPushButton("Hide Control Panel", controlFrame);
+    toggleControlPanelButton = new QPushButton("Show Control Panel", controlFrame);
 
     row2Layout->addWidget(toggleControlPanelButton);
 
