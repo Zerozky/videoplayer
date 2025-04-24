@@ -15,7 +15,7 @@
 #include <QTime>
 #ifdef Q_OS_MAC
 #include <soundtouch/SoundTouch.h>
-#elif Q_OS_WIN
+#elif defined(Q_OS_WIN)
 #include <SoundTouch.h>
 #endif
 extern "C"
