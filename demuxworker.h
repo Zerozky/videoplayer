@@ -13,7 +13,11 @@
 #include <QFile>
 #include <QTextStream>
 #include <QTime>
+#ifdef Q_OS_MAC
 #include <soundtouch/SoundTouch.h>
+#elif Q_OS_WIN
+#include <SoundTouch.h>
+#endif
 extern "C"
 {
 #include "libavutil/frame.h"
@@ -48,6 +52,7 @@ signals:
     void sigCodecInfo(const QString &codecInfo);
     void sigSubtitle(const QString &subtitleText, int durationMs);
     void sigSubtitleImage(const QImage &subtitleImage, int durationMs);
+    void finished();
 
 public slots:
     void slotDoWork();

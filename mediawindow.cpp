@@ -131,29 +131,8 @@ MediaWindow::~MediaWindow()
 
 void MediaWindow::openFile()
 {
-    // 如果线程处于暂停状态，先断开并唤醒
-    if (demuxWorker) {
-        disconnect(demuxWorker, nullptr, this, nullptr);
-        QMutexLocker locker(&demuxWorker->pauseMutex);
-        demuxWorker->isPause = false;
-        demuxWorker->pauseCondition.wakeAll();
-    }
-    // 如果已有线程，先停止播放并清理
-    if (demuxThread) {
-        if (demuxWorker)
-            demuxWorker->isPlay = false;
-        demuxThread->requestInterruption();
-        demuxThread->quit();
-        demuxThread->wait();
-        demuxThread->deleteLater();
-        demuxThread = nullptr;
-        qDebug() << "demuxThread cleared";
-    }
-    if (demuxWorker) {
-        demuxWorker->deleteLater();
-        demuxWorker = nullptr;
-        qDebug() << "demuxWorker cleared";
-    }
+    // 1) 禁用 Open 按钮，防止重入
+    openButton->setEnabled(false);
 
 #ifdef Q_OS_WIN
     // 释放转换资源
@@ -172,60 +151,18 @@ void MediaWindow::openFile()
     }
 #endif
 
-    // 处理完清理后，确保事件处理完毕
-    QCoreApplication::processEvents();
-
-    // 使用延时调用，确保旧资源已清理完毕
-    QTimer::singleShot(100, this, [this]() {
-        QString filePath = QFileDialog::getOpenFileName(
-            this,
-            tr("Open Video File"),
-            QString(),
-            tr("Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*.*)"),
-            nullptr,
-            QFileDialog::DontUseNativeDialog
-            );
-
-        qDebug() << "Selected file:" << filePath;
-        if (!filePath.isEmpty())
-        {
-            selectedFilePath = filePath;
-
-            // 创建新的线程和 worker
-            demuxThread = new QThread;
-            demuxWorker = new DemuxWorker;
-            demuxWorker->moveToThread(demuxThread);
-            setupConnections();  // 仅建立信号连接
-            qDebug() << "重新建立连接";
-
-            // 自动寻找 .chs.ass 或 .cht.ass
-            QString base = QFileInfo(selectedFilePath).absolutePath() + "/" + QFileInfo(selectedFilePath).completeBaseName();
-            QString chs = base + ".chs.ass";
-            QString cht = base + ".cht.ass";
-
-            if (QFile::exists(chs)) {
-                externalSubtitlePath = chs;
-                emit sigLoadExternalSubtitle(externalSubtitlePath);
-                qDebug() << "自动加载简体字幕：" << externalSubtitlePath;
-            }
-            else if (QFile::exists(cht)) {
-                externalSubtitlePath = cht;
-                emit sigLoadExternalSubtitle(externalSubtitlePath);
-                qDebug() << "自动加载繁体字幕：" << externalSubtitlePath;
-            }
-
-            emit sigSetFilePath(selectedFilePath);
-            startPlay();
-
-            playButton->setEnabled(true);
-            playButton->setText("Pause");
-
-            setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
-
-            // 更新右侧视频列表
-            updateVideoList();
-        }
-    });
+    stopPlay();
+    // 弹系统对话框
+    QString path = QFileDialog::getOpenFileName(
+        this, tr("Open Video File"), {},
+        tr("Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*.*)")
+        );
+    openButton->setEnabled(true);
+    if (path.isEmpty()) return;
+    // 用统一接口载入
+    loadFile(path);
+    // 更新侧边列表
+    updateVideoList();
 }
 
 void MediaWindow::togglePlayPause()
@@ -327,47 +264,33 @@ void MediaWindow::startPlay()
 
 void MediaWindow::stopPlay()
 {
-    // 断开与 demuxWorker 的所有信号连接，避免 pending 调用执行
-    if(demuxWorker)
-        disconnect(demuxWorker, nullptr, this, nullptr);
-
+    // 停 signal/slot，通知 worker 停掉循环
     if (demuxWorker) {
+        disconnect(demuxWorker, nullptr, this, nullptr);
         // 通知 worker 停止播放
         demuxWorker->isPlay = false;
         // 如果处于暂停状态，先唤醒，防止线程阻塞
         demuxWorker->pauseCondition.wakeAll();
-        // 请求线程中断并结束事件循环
-        if (demuxThread) {
-            demuxThread->requestInterruption();
-            demuxThread->quit();
-            demuxThread->wait();
-        }
     }
-    // 恢复视频区域显示
-#ifdef Q_OS_WIN
-    // Windows 下使用 CudaVideoWidget 清屏
-    if (cudaVideoWindow)
-        cudaVideoWindow->clearScreen();
-#else
-    // 其他平台使用原来的 QLabel 清空背景
-    if (videoLabel)
-        videoLabel->setStyleSheet("background-color: black;");
-#endif
+
+    // 请求线程中断并结束事件循环
+    if (demuxThread) {
+        demuxThread->requestInterruption();
+        demuxThread->quit();
+        demuxThread->wait();
+    }
+
+
+    delete demuxWorker;
+    demuxWorker = nullptr;
+    qDebug() << "demuxThread cleared";
+    delete demuxThread;
+    demuxThread = nullptr;
+    qDebug() << "demuxWorker cleared";
+
     // 恢复按钮状态
     playButton->setEnabled(true);
     playButton->setText("Play");
-
-    // 安全删除线程和 worker
-    if (demuxThread) {
-        demuxThread->deleteLater();
-        demuxThread = nullptr;
-        qDebug() << "demuxThread cleared";
-    }
-    if (demuxWorker) {
-        demuxWorker->deleteLater();
-        demuxWorker = nullptr;
-        qDebug() << "demuxWorker cleared";
-    }
 
 #ifdef Q_OS_WIN
     // 释放转换相关资源
@@ -398,39 +321,14 @@ int MediaWindow::initVideoDisplay(int mWidth,int mHeight)
 
 void MediaWindow::onVideoListDoubleClicked(QListWidgetItem *item)
 {
-    if(item) {
-        QString newFilePath = item->data(Qt::UserRole).toString();
-        if(!newFilePath.isEmpty() && newFilePath != selectedFilePath) {
-            // 停止当前播放
-            stopPlay();
-            // 更新文件路径
-            selectedFilePath = newFilePath;
-            // 更新窗口标题
-            setWindowTitle("Media Player - " + QFileInfo(selectedFilePath).fileName());
-            // 启动播放
-            demuxThread = new QThread;
-            demuxWorker = new DemuxWorker;
-            demuxWorker->moveToThread(demuxThread);
-            setupConnections();
-            emit sigSetFilePath(selectedFilePath);
+    if(!item) return;
+    QString newFilePath = item->data(Qt::UserRole).toString();
+    if (newFilePath.isEmpty() || newFilePath == selectedFilePath) return;
 
-            QFileInfo fi(selectedFilePath);
-            QString base = fi.absolutePath() + "/" + fi.completeBaseName();
-            QString chs = base + ".chs.ass";
-            QString cht = base + ".cht.ass";
-            if (QFile::exists(chs)) {
-                demuxWorker->setExternalSubtitle(chs);
-                qDebug() << "自动加载简体字幕：" << chs;
-            }
-            else if (QFile::exists(cht)) {
-                demuxWorker->setExternalSubtitle(cht);
-                qDebug() << "自动加载繁体字幕：" << cht;
-            }
+    // 停止当前播放
+    stopPlay();
+    loadFile(newFilePath);
 
-
-            startPlay();
-        }
-    }
 }
 
 void MediaWindow::onDeepSeekButtonClicked()
@@ -919,36 +817,18 @@ void MediaWindow::setupConnections()
 
 void MediaWindow::restartPlaybackAfterStreamSelection()
 {
-    // 停止当前播放，断开信号连接，并确保线程退出
-    if(demuxWorker) {
-        demuxWorker->isPlay = false;
-        demuxWorker->pauseCondition.wakeAll();
-    }
-    if (demuxThread) {
-        demuxThread->requestInterruption();
-        demuxThread->quit();
-        demuxThread->wait();
-        demuxThread->deleteLater();
-        demuxThread = nullptr;
-    }
-    if (demuxWorker) {
-        demuxWorker->deleteLater();
-        demuxWorker = nullptr;
-    }
-    // 延时200ms之后重建播放线程，以确保所有资源都释放干净
-    QTimer::singleShot(200, this, [this]() {
-        // 建立新线程和 worker
-        demuxThread = new QThread;
-        demuxWorker = new DemuxWorker;
-        demuxWorker->moveToThread(demuxThread);
-        setupConnections(); // 重新建立所有信号连接
-        // 将新的流选择参数传递给新创建的 demuxWorker
-        demuxWorker->setStreamIndices(selectedVideoStream, selectedAudioStream, selectedSubtitleStream);
-        // 传入当前选择的文件路径
-        emit sigSetFilePath(selectedFilePath);
-        // 若需要，可以在此处传递当前播放位置（例如调用 seekTo(currentTime)）
-        startPlay();
-    });
+    stopPlay();
+    // 建立新线程和 worker
+    demuxThread = new QThread;
+    demuxWorker = new DemuxWorker;
+    demuxWorker->moveToThread(demuxThread);
+    setupConnections(); // 重新建立所有信号连接
+    // 将新的流选择参数传递给新创建的 demuxWorker
+    demuxWorker->setStreamIndices(selectedVideoStream, selectedAudioStream, selectedSubtitleStream);
+    // 传入当前选择的文件路径
+    emit sigSetFilePath(selectedFilePath);
+    // 若需要，可以在此处传递当前播放位置（例如调用 seekTo(currentTime)）
+    startPlay();
 }
 
 QString MediaWindow::getStreamDescription(AVStream *stream)
@@ -999,6 +879,50 @@ void MediaWindow::resizeEvent(QResizeEvent *event)
         int y = containerH - h - 10;
         subtitleLabel->setGeometry(x, y, w, h);
     }
+}
+
+void MediaWindow::loadFile(const QString &filePath)
+{
+    selectedFilePath = filePath;
+    setWindowTitle(tr("Media Player - %1").arg(QFileInfo(filePath).fileName()));
+
+    // 4) 创建新线程和 worker，connect 信号，然后 start()
+    demuxThread = new QThread(this);
+    demuxWorker = new DemuxWorker;
+    demuxWorker->moveToThread(demuxThread);
+
+    // 线程启动后调用解复用
+    connect(demuxThread, &QThread::started,
+            demuxWorker, &DemuxWorker::slotDoWork, Qt::QueuedConnection);
+
+    // 解复用完成后自动删自己、删线程
+    connect(demuxWorker, &DemuxWorker::finished,
+            demuxThread,   &QThread::quit, Qt::QueuedConnection);
+    connect(demuxThread, &QThread::finished,
+            demuxThread,   &QObject::deleteLater, Qt::QueuedConnection);
+    connect(demuxWorker, &DemuxWorker::finished,
+            demuxWorker,   &QObject::deleteLater, Qt::QueuedConnection);
+
+    setupConnections();
+    emit sigSetFilePath(selectedFilePath);
+
+    // 自动寻找 .chs.ass 或 .cht.ass
+    QString base = QFileInfo(selectedFilePath).absolutePath() + "/" + QFileInfo(selectedFilePath).completeBaseName();
+    QString chs = base + ".chs.ass";
+    QString cht = base + ".cht.ass";
+
+    if (QFile::exists(chs)) {
+        externalSubtitlePath = chs;
+        emit sigLoadExternalSubtitle(externalSubtitlePath);
+        qDebug() << "自动加载简体字幕：" << externalSubtitlePath;
+    }
+    else if (QFile::exists(cht)) {
+        externalSubtitlePath = cht;
+        emit sigLoadExternalSubtitle(externalSubtitlePath);
+        qDebug() << "自动加载繁体字幕：" << externalSubtitlePath;
+    }
+
+    startPlay();
 }
 
 void MediaWindow::setupControlPanel()

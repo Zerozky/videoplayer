@@ -840,4 +840,5 @@ void DemuxWorker::slotDoWork()
 #endif
     }
     cleanup();
+    emit finished();
 }
