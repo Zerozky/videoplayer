@@ -38,6 +38,7 @@ class MediaWindow : public QWidget
 public:
     explicit MediaWindow(QWidget *parent = nullptr);
     ~MediaWindow() ;
+    ControlPanelDialog *controlDialog;
 
 signals:
     void sigStartPlay();
@@ -116,7 +117,6 @@ private:
     QLabel* verticalSubtitleLabel;   // 竖排字幕
 
     QPushButton *toggleControlPanelButton; // 打开/隐藏控制面板
-    ControlPanelDialog *controlDialog;
 
     void setupUI();
     void setupControlPanel();

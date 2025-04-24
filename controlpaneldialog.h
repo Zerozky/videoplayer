@@ -18,6 +18,7 @@ signals:
     void setPlaybackSpeed(double speed);
     void subtitleFontChanged(const QFont &font);
     void subtitleFontSizeChanged(int size);
+    void languageChanged(const QString &locale);
 };
 
 #endif // CONTROLPANELDIALOG_H

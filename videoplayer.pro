@@ -23,6 +23,12 @@ HEADERS += \
     demuxworker.h \
     mediawindow.h
 
+# 翻译文件列表
+TRANSLATIONS += \
+    translations/app_zh_CN.ts \
+    translations/app_en_US.ts \
+    translations/app_ja_JP.ts
+
 FORMS +=
 
 # Default rules for deployment.
@@ -69,3 +75,6 @@ win32-msvc {
     LIBS += "opengl32.lib"
     LIBS += "$$SOUNDTOUCH_DIR/lib/SoundTouchD_x64.lib"
 }
+
+RESOURCES += \
+    resources.qrc

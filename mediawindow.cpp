@@ -82,11 +82,9 @@ MediaWindow::MediaWindow(QWidget *parent) :
     connect(toggleControlPanelButton, &QPushButton::clicked, this, [this](){
         if (controlDialog->isVisible()) {
             controlDialog->hide();
-            toggleControlPanelButton->setText(tr("Show Control Panel"));
         } else {
             controlDialog->move(this->geometry().center() - controlDialog->rect().center());
             controlDialog->show();
-            toggleControlPanelButton->setText(tr("Hide Control Panel"));
         }
     });
 
@@ -106,7 +104,6 @@ MediaWindow::MediaWindow(QWidget *parent) :
         subtitleLabel->setFont(f);
         verticalSubtitleLabel->setFont(f);
     });
-
 }
 
 MediaWindow::~MediaWindow()
@@ -437,7 +434,7 @@ void MediaWindow::updateVideoList()
 void MediaWindow::onSelectStreamButtonClicked()
 {
     QDialog dialog(this);
-    dialog.setWindowTitle("选择流");
+    dialog.setWindowTitle(tr("选择流"));
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
     QComboBox *videoCombo = new QComboBox(&dialog);
     QComboBox *audioCombo = new QComboBox(&dialog);
@@ -447,11 +444,11 @@ void MediaWindow::onSelectStreamButtonClicked()
     AVFormatContext *fmtCtx = nullptr;
     QByteArray filePathBytes = selectedFilePath.toLocal8Bit();
     if(avformat_open_input(&fmtCtx, filePathBytes.data(), nullptr, nullptr) != 0) {
-        QMessageBox::warning(this, "错误", "无法打开文件获取流信息。");
+        QMessageBox::warning(this, tr("错误"), tr("无法打开文件获取流信息。"));
         return;
     }
     if(avformat_find_stream_info(fmtCtx, nullptr) < 0) {
-        QMessageBox::warning(this, "错误", "无法获取流信息。");
+        QMessageBox::warning(this, tr("错误"), tr("无法获取流信息。"));
         avformat_close_input(&fmtCtx);
         return;
     }
@@ -467,11 +464,11 @@ void MediaWindow::onSelectStreamButtonClicked()
     }
     avformat_close_input(&fmtCtx);
 
-    layout->addWidget(new QLabel("视频流：", &dialog));
+    layout->addWidget(new QLabel(tr("视频流："), &dialog));
     layout->addWidget(videoCombo);
-    layout->addWidget(new QLabel("音频流：", &dialog));
+    layout->addWidget(new QLabel(tr("音频流："), &dialog));
     layout->addWidget(audioCombo);
-    layout->addWidget(new QLabel("字幕流：", &dialog));
+    layout->addWidget(new QLabel(tr("字幕流："), &dialog));
     layout->addWidget(subtitleCombo);
     QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     layout->addWidget(buttonBox);
@@ -833,24 +830,24 @@ void MediaWindow::restartPlaybackAfterStreamSelection()
 
 QString MediaWindow::getStreamDescription(AVStream *stream)
 {
-    QString desc = QString("索引 %1: ").arg(stream->index);
+    QString desc = QString(tr("索引 %1: ")).arg(stream->index);
     AVCodecParameters *par = stream->codecpar;
     if (par->codec_type == AVMEDIA_TYPE_VIDEO) {
-        desc += "视频";
+        desc += tr("视频");
         desc += QString(" (%1 x %2)").arg(stream->codecpar->width).arg(stream->codecpar->height);
         // 可以读取附加信息，例如 codec id 的名称、可能的帧率等
         const AVCodec *codec = avcodec_find_decoder(par->codec_id);
         if(codec)
             desc += QString(" - %1").arg(codec->long_name);
     } else if (par->codec_type == AVMEDIA_TYPE_AUDIO) {
-        desc += "音频";
+        desc += tr("音频");
         // 采样率、通道数、编码器名称等
-        desc += QString(" - %1 Hz, %2通道").arg(par->sample_rate).arg(par->ch_layout.nb_channels);
+        desc += QString(tr(" - %1 Hz, %2通道")).arg(par->sample_rate).arg(par->ch_layout.nb_channels);
         const AVCodec *codec = avcodec_find_decoder(par->codec_id);
         if(codec)
             desc += QString(" - %1").arg(codec->long_name);
     } else if (par->codec_type == AVMEDIA_TYPE_SUBTITLE) {
-        desc += "字幕";
+        desc += tr("字幕");
         // 可以从 metadata 中提取语言信息
         AVDictionaryEntry *langEntry = av_dict_get(stream->metadata, "language", nullptr, 0);
         if(langEntry)
@@ -936,22 +933,21 @@ void MediaWindow::setupControlPanel()
     progressSlider = createSlider(0, 1000, 0);
     volumeSlider = createSlider(0, 100, 100);
 
-    row1Layout->addWidget(new QLabel("Progress:", controlFrame));
     row1Layout->addWidget(progressSlider, 1);
-    row1Layout->addWidget(new QLabel("Volume:", controlFrame));
+    row1Layout->addWidget(new QLabel(tr("Volume"), controlFrame));
     row1Layout->addWidget(volumeSlider, 0);
 
     controlLayout->addLayout(row1Layout);
 
     // 第二排：按钮
     QHBoxLayout *row2Layout = new QHBoxLayout();
-    openButton = createButton("Open File");
-    playButton = createButton("Play");
-    stopButton = createButton("Stop");
+    openButton = createButton(tr("Open File"));
+    playButton = createButton(tr("Play"));
+    stopButton = createButton(tr("Stop"));
     rewindButton = createButton("<<");
     forwardButton = createButton(">>");
-    selectStreamButton = createButton("选择流");
-    loadSubtitleButton = createButton("加载外挂字幕");
+    selectStreamButton = createButton(tr("选择流"));
+    loadSubtitleButton = createButton(tr("加载外挂字幕"));
 
     playButton->setEnabled(false);
 
@@ -972,7 +968,7 @@ void MediaWindow::setupControlPanel()
     row2Layout->addWidget(codecInfoLabel);
 
     // 控制面板开关按钮
-    toggleControlPanelButton = new QPushButton("Show Control Panel", controlFrame);
+    toggleControlPanelButton = new QPushButton(tr("Control Panel"), controlFrame);
 
     row2Layout->addWidget(toggleControlPanelButton);
 

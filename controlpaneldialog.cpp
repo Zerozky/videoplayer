@@ -2,6 +2,7 @@
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QSettings>
 
 ControlPanelDialog::ControlPanelDialog(QWidget *parent)
     : QDialog(parent)
@@ -45,7 +46,7 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
     mainLayout->addLayout(row2);
 
     auto updateSpeedLabel = [lblSpeed](double s){
-        lblSpeed->setText(QString("Speed: %1×").arg(s));
+        lblSpeed->setText(QString(tr("Speed: %1×")).arg(s));
     };
     connect(btn05x,  &QPushButton::clicked, this, [=]{ emit setPlaybackSpeed(0.5);  updateSpeedLabel(0.5);  });
     connect(btn1x,  &QPushButton::clicked, this, [=]{ emit setPlaybackSpeed(1.0);  updateSpeedLabel(1.0);  });
@@ -71,4 +72,26 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
 
     // 设置固定宽度，方便 UI 排列
     setFixedWidth(500);
+
+    QHBoxLayout *rowLang = new QHBoxLayout;
+    rowLang->addWidget(new QLabel(tr("Language:"), this));
+    QComboBox *comboLang = new QComboBox(this);
+    comboLang->addItem(QStringLiteral("简体中文"), "zh_CN");
+    comboLang->addItem(QStringLiteral("English"), "en_US");
+    comboLang->addItem(QStringLiteral("日本語"), "ja_JP");
+    // 读取上次保存的语言
+    QSettings settings("MyCompany", "MyApp");
+    QString currentLocale = settings.value("AppLanguage", "zh_CN").toString();
+    // 把下拉框选中到当前语言
+    int idx = comboLang->findData(currentLocale);
+    if (idx >= 0) {
+        comboLang->setCurrentIndex(idx);
+    }
+    rowLang->addWidget(comboLang);
+    mainLayout->addLayout(rowLang);
+
+    connect(comboLang, QOverload<int>::of(&QComboBox::currentIndexChanged),this, [comboLang, this](int){
+        emit languageChanged(comboLang->currentData().toString());
+    });
+
 }
