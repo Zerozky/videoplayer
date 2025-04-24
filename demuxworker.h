@@ -13,14 +13,14 @@
 #include <QFile>
 #include <QTextStream>
 #include <QTime>
-#include <SoundTouch.h>
+#include <soundtouch/SoundTouch.h>
 extern "C"
 {
 #include "libavutil/frame.h"
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswresample/swresample.h>
-};
+}
 
 using namespace soundtouch;
 

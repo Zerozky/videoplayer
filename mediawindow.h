@@ -19,8 +19,8 @@
 #include "demuxworker.h"
 #ifdef Q_OS_WIN
 #include "cudavideowindow.h"
-#include "controlpaneldialog.h"
 #endif
+#include "controlpaneldialog.h"
 extern "C"
 {
 #include <libavcodec/avcodec.h>
