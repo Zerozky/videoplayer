@@ -158,6 +158,9 @@ void DemuxWorker::setPlaybackSpeed(double speed)
     playbackSpeed = speed;
     qDebug() << "Playback speed set to" << playbackSpeed;
 
+    soundTouch.clear();
+    soundTouch.setTempo(playbackSpeed);
+
     // —— 1) Flush 解码器缓冲，丢掉所有未渲染帧 ——
     if (m_videoCodecContext) avcodec_flush_buffers(m_videoCodecContext);
     if (m_audioCodecContext) avcodec_flush_buffers(m_audioCodecContext);
@@ -170,10 +173,10 @@ void DemuxWorker::setPlaybackSpeed(double speed)
         m_audioSink = nullptr;
     }
     QAudioFormat fmt = m_audioFormat;
-    fmt.setSampleRate(int(originalSampleRate * playbackSpeed));
+    fmt.setSampleRate(originalSampleRate);
     m_audioSink = new QAudioSink(m_audioDevice, fmt);
     m_audioSink->setVolume(1.0);
-    quint32 buf = quint32(originalSampleRate * 4 * 1);
+    quint32 buf = static_cast<quint32>(originalSampleRate * 2 * 5);
     m_audioSink->setBufferSize(buf);
     m_audioIO = m_audioSink->start();
 
@@ -446,14 +449,19 @@ void DemuxWorker::slotDoWork()
         // 设置 Qt 音频格式
         m_audioFormat.setSampleRate(originalSampleRate);
         m_audioFormat.setChannelCount(2);
-        m_audioFormat.setSampleFormat(QAudioFormat::Int16);
+        m_audioFormat.setSampleFormat(QAudioFormat::Float);
 
         // 创建并启动 QAudioSink
         m_audioSink = new QAudioSink(m_audioDevice, m_audioFormat);
         m_audioSink->setVolume(1.0);
-        quint32 buf = static_cast<quint32>(originalSampleRate * 4 * 1);
+        quint32 buf = static_cast<quint32>(originalSampleRate * 2 * 5);
         m_audioSink->setBufferSize(buf);
         m_audioIO = m_audioSink->start();
+
+        // — Initialize SoundTouch —
+        soundTouch.setSampleRate(originalSampleRate);
+        soundTouch.setChannels(2);
+        soundTouch.setTempo(playbackSpeed);  // start at 1.0×
 
         // 初始化 SwrContext（音频重采样）
         swrCtx = swr_alloc();
@@ -476,7 +484,7 @@ void DemuxWorker::slotDoWork()
         av_opt_set_int(swrCtx, "out_sample_rate", pAudioCodecPara->sample_rate, 0);
 
         av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", (AVSampleFormat)pAudioCodecPara->format, 0);
-        av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
+        av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
         if (swr_init(swrCtx) < 0) {
             qDebug() << "无法初始化 SwrContext";
             cleanup();
@@ -507,6 +515,7 @@ void DemuxWorker::slotDoWork()
     QElapsedTimer timer;
     timer.start();
     startTime = timer.elapsed();  // 初始播放时间
+    soundTouch.clear();
 
     while(isPlay) {
         // 检查跳转请求
@@ -540,6 +549,7 @@ void DemuxWorker::slotDoWork()
                     pauseTotal = 0;
                     currentPlaybackTime = targetTime;
                     lastSeekTimeSec = targetTime;
+                    soundTouch.clear();
 
                     // 在 seek 后重置外挂 ASS 事件索引
                     qint64 nowMs = qint64(targetTime * 1000);
@@ -708,7 +718,7 @@ void DemuxWorker::slotDoWork()
                 // 设定通道布局
                 av_channel_layout_default(&resampledFrame->ch_layout, 2);  // 2 代表立体声
                 resampledFrame->sample_rate = pAudioCodecContext->sample_rate;
-                resampledFrame->format = AV_SAMPLE_FMT_S16;
+                resampledFrame->format = AV_SAMPLE_FMT_FLT;
                 if (swr_convert_frame(swrCtx, resampledFrame, pFrame) < 0) {
                     qDebug() << "音频重采样失败";
                     av_frame_free(&resampledFrame);
@@ -723,12 +733,28 @@ void DemuxWorker::slotDoWork()
                     AV_SAMPLE_FMT_S16,
                     1);
 
-                // 将数据写入 QAudioSink
-                if (m_audioIO) {
-                    m_audioIO->write((const char *)resampledFrame->data[0], dataSize);
-                }
+                // // 将数据写入 QAudioSink
+                // if (m_audioIO) {
+                //     m_audioIO->write((const char *)resampledFrame->data[0], dataSize);
+                // }
 
-                av_frame_free(&resampledFrame);
+                const SAMPLETYPE* inBuf = reinterpret_cast<const SAMPLETYPE*>(resampledFrame->data[0]);
+                int nbSamples = resampledFrame->nb_samples;
+                soundTouch.putSamples(inBuf, nbSamples);
+
+                QVector<SAMPLETYPE> outBuf(resampledFrame->nb_samples * 2);
+                int received;
+                do {
+                    received = soundTouch.receiveSamples(outBuf.data(), resampledFrame->nb_samples);
+                    if (received > 0) {
+                        // received = number of samples per channel
+                        int bytes = received * sizeof(SAMPLETYPE) * 2;
+                        m_audioIO->write(reinterpret_cast<const char*>(outBuf.data()), bytes);
+                    }
+                } while (received > 0);
+
+                // av_frame_free(&resampledFrame);
+                av_frame_unref(pFrame);
             }
         }
         // 处理字幕包

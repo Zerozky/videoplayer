@@ -13,6 +13,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <QTime>
+#include <SoundTouch.h>
 extern "C"
 {
 #include "libavutil/frame.h"
@@ -20,6 +21,8 @@ extern "C"
 #include <libavformat/avformat.h>
 #include <libswresample/swresample.h>
 };
+
+using namespace soundtouch;
 
 class DemuxWorker : public QObject
 {
@@ -90,6 +93,8 @@ private:
 
     double lastSeekTimeSec = -1.0;
     double videoFrameRate      = 30.0;    // 视频流帧率（初始化时从流里读入）
+
+    SoundTouch soundTouch;
 };
 
 #endif // DEMUXWORKER_H

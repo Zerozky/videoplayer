@@ -51,9 +51,11 @@ macx {
 win32-msvc {
     CUDA_DIR = "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8"
     FFMPEG_DIR = "D:/ffmpeg/ffmpeg-7.1-full_build-shared"
+    SOUNDTOUCH_DIR = "D:/soundtouch/soundtouch"
 
     INCLUDEPATH += $$FFMPEG_DIR/include
     INCLUDEPATH += $$CUDA_DIR/include
+    INCLUDEPATH += $$SOUNDTOUCH_DIR/include
 
     LIBS += "$$FFMPEG_DIR/lib/avcodec.lib" \
             "$$FFMPEG_DIR/lib/avformat.lib" \
@@ -64,4 +66,5 @@ win32-msvc {
             "$$FFMPEG_DIR/lib/swscale.lib"
     LIBS += "$$CUDA_DIR/lib/x64/cudart.lib"
     LIBS += "opengl32.lib"
+    LIBS += "$$SOUNDTOUCH_DIR/lib/SoundTouchD_x64.lib"
 }
