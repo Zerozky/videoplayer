@@ -4,4 +4,21 @@
         <file alias="app_ja_JP">translations/app_ja_JP.qm</file>
         <file alias="app_zh_CN">translations/app_zh_CN.qm</file>
     </qresource>
+    <qresource prefix="/styles">
+        <file alias="app.qss">styles/app.qss</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="green">icons/button_blank_green_14986.ico</file>
+        <file alias="red">icons/button_blank_red_14987.ico</file>
+        <file alias="yellow">icons/button_blank_yellow_14988.ico</file>
+        <file alias="forward">icons/button_forward_14994.ico</file>
+        <file alias="rewind">icons/button_rewind_15004.ico</file>
+        <file alias="general">icons/gear_14964.ico</file>
+        <file alias="folder">icons/my_videos_folder_14972.ico</file>
+        <file alias="pause">icons/button_pause_14998.ico</file>
+        <file alias="play">icons/button_play_15000.ico</file>
+        <file alias="stop">icons/button_delete_14991.ico</file>
+        <file alias="max">icons/button_add_insert_new_14983.ico</file>
+        <file alias="close">icons/button_close_14990.ico</file>
+    </qresource>
 </RCC>

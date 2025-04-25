@@ -84,6 +84,7 @@ private:
     QFrame *videoFrame;           // 左上视频区域
     QFrame *controlFrame;         // 左下控制面板
 
+    QWidget* titleBar;
     // 右侧区域，包含两个页面
     QTabWidget *rightTabWidget;
     // 第一个页面：视频列表

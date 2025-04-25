@@ -1,0 +1,142 @@
+/* 全局字体 */
+* {
+    font-family: "Segoe UI", "微软雅黑", Arial, sans-serif;
+    font-size: 10pt;
+}
+
+/* 窗口背景 */
+QWidget, QFrame {
+    background-color: #f2f6fa;
+    color: #333;
+}
+/* 标题栏背景（淡灰蓝渐变） */
+QWidget#titleBar {
+    border-bottom: 1px solid #a0a0a0; /* 为标题栏底部添加边框 */
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 #e8edf2, stop:1 #c8d4e0);
+}
+
+/* 分割条 */
+QSplitter {
+    background-color: #323232;
+    border: none;
+}
+
+/* 扁平化按钮 */
+QPushButton {
+    background-color: #3c7fb1;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+QPushButton:hover {
+    background-color: #559bd1;
+}
+QPushButton:pressed {
+    background-color: #2a6280;
+}
+QPushButton:disabled {
+    background-color: #555;
+    color: #888;
+}
+
+/* 保证按钮本身无边框，仅图标可见 */
+QPushButton#playButton, QPushButton#stopButton,
+QPushButton#openButton, QPushButton#rewindButton, QPushButton#forwardButton {
+    border: none;
+    background: transparent;
+    width: 32px; height: 32px;
+    padding: 0px 4px;
+    border-radius: 16px; /* 圆形按钮 */
+}
+QPushButton#playButton:hover, QPushButton#stopButton:hover,
+QPushButton#openButton:hover, QPushButton#rewindButton:hover, QPushButton#forwardButton:hover {
+    background: rgba(255,255,255,0.1);
+}
+QPushButton#playButton:pressed, QPushButton#stopButton:pressed,
+QPushButton#openButton:pressed, QPushButton#rewindButton:pressed, QPushButton#forwardButton:pressed {
+    background: rgba(255,255,255,0.2);
+}
+QPushButton#playButton:disabled {
+    background: none;
+}
+
+/* 按钮纯图标，无文字 */
+QPushButton#minimizeButton, QPushButton#maximizeButton, QPushButton#closeButton {
+    background: transparent;
+    border: none;
+    width: 16px; height: 16px;
+}
+QPushButton#closeButton:hover, QPushButton#maximizeButton:hover, QPushButton#minimizeButton:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+/* 进度条/音量滑块 */
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #444444;
+    border-radius: 3px;
+}
+QSlider::handle:horizontal {
+    width: 12px;
+    height: 12px;
+    background: #3c7fb1;
+    margin: -3px 0;  /* 把 handle 居中拉到 groove 中心 */
+    border-radius: 6px;
+}
+
+/* 下拉列表 */
+QComboBox {
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 8px;
+    background-color: #3b3b3b;
+}
+QComboBox:hover {
+    border-color: #3c7fb1;
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 16px;
+    border-left: none;
+}
+QComboBox QAbstractItemView {
+    border: 1px solid #555;
+    background: #323232;
+    selection-background-color: #3c7fb1;
+    color: #f0f0f0;
+}
+
+/* 标签 */
+QLabel {
+    padding: 2px;
+}
+
+/* 文本输入框和文本区域 */
+QLineEdit, QTextEdit {
+    background-color: #1e1e1e;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px;
+    selection-background-color: #3c7fb1;
+    selection-color: #f0f0f0;
+}
+
+QTabWidget::pane {
+    border: none;
+    background: #2b2b2b;
+}
+QTabBar::tab {
+    background: #3b3b3b;
+    color: #bbb;
+    padding: 6px 12px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    margin-right: 2px;
+}
+QTabBar::tab:selected {
+    background: #323232;
+    color: #fff;
+}

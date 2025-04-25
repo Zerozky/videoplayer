@@ -124,88 +124,88 @@
     </message>
     <message>
         <location filename="../mediawindow.cpp" line="674"/>
-        <location filename="../mediawindow.cpp" line="950"/>
+        <location filename="../mediawindow.cpp" line="954"/>
         <source>加载外挂字幕</source>
         <translation>外部字幕</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="751"/>
+        <location filename="../mediawindow.cpp" line="755"/>
         <source>Other Videos</source>
         <translation>他のビデオ</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="757"/>
+        <location filename="../mediawindow.cpp" line="761"/>
         <source>Enter DeepSeek query...</source>
         <translation>質問を入力してください...</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="758"/>
+        <location filename="../mediawindow.cpp" line="762"/>
         <source>Search</source>
         <translation>質問する</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="765"/>
+        <location filename="../mediawindow.cpp" line="769"/>
         <source>DeepSeek</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="833"/>
+        <location filename="../mediawindow.cpp" line="837"/>
         <source>索引 %1: </source>
         <translation>インデックス %1: </translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="836"/>
+        <location filename="../mediawindow.cpp" line="840"/>
         <source>视频</source>
         <translation>ビデオ</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="843"/>
+        <location filename="../mediawindow.cpp" line="847"/>
         <source>音频</source>
         <translation>オーディオ</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="845"/>
+        <location filename="../mediawindow.cpp" line="849"/>
         <source> - %1 Hz, %2通道</source>
         <translation> - %1 Hz、%2 チャネル</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="850"/>
+        <location filename="../mediawindow.cpp" line="854"/>
         <source>字幕</source>
         <translation>字幕</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="884"/>
+        <location filename="../mediawindow.cpp" line="888"/>
         <source>Media Player - %1</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="937"/>
+        <location filename="../mediawindow.cpp" line="941"/>
         <source>Volume</source>
         <translation>音量</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="944"/>
+        <location filename="../mediawindow.cpp" line="948"/>
         <source>Open File</source>
         <translation>ファイル</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="945"/>
+        <location filename="../mediawindow.cpp" line="949"/>
         <source>Play</source>
         <translation>再生</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="946"/>
+        <location filename="../mediawindow.cpp" line="950"/>
         <source>Stop</source>
         <translation>停止</translation>
     </message>
     <message>
         <location filename="../mediawindow.cpp" line="437"/>
-        <location filename="../mediawindow.cpp" line="949"/>
+        <location filename="../mediawindow.cpp" line="953"/>
         <source>选择流</source>
         <translation>ストリーム</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="971"/>
+        <location filename="../mediawindow.cpp" line="976"/>
         <source>Control Panel</source>
         <translation>パネル</translation>
     </message>

@@ -23,7 +23,15 @@ int main(int argc, char *argv[])
 
     qDebug() << "App Run.";
     MediaWindow *mediaWindow = new MediaWindow();
+    mediaWindow->setObjectName("mediaWindow");
+    mediaWindow->setAttribute(Qt::WA_StyledBackground, true);
     mediaWindow->show();
+
+    QFile qssFile(":/styles/app.qss");
+    if (qssFile.open(QFile::ReadOnly)) {
+        QString style = QLatin1String(qssFile.readAll());
+        a.setStyleSheet(style);
+    }
 
     // 监听语言切换
     QObject::connect(mediaWindow->controlDialog, &ControlPanelDialog::languageChanged, &a, [&](const QString &locale){

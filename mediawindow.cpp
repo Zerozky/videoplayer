@@ -26,6 +26,7 @@
 #include <QStackedLayout>
 #include <QGraphicsDropShadowEffect>
 #include <QRegularExpression>
+#include "titlebar.h"
 extern "C" {
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
@@ -34,6 +35,40 @@ extern "C" {
 MediaWindow::MediaWindow(QWidget *parent) :
     QWidget(parent)
 {
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint);
+
+    // 创建标题栏
+    titleBar = new TitleBar(this);
+    titleBar->setObjectName("titleBar");
+    titleBar->setAttribute(Qt::WA_StyledBackground, true);
+
+    // 水平布局 关闭/最小化/最大化
+    auto *hbox = new QHBoxLayout(titleBar);
+    hbox->setContentsMargins(0, 0, 0, 0);
+    hbox->setSpacing(0);
+    // 关闭
+    auto *closeBtn = new QPushButton(QIcon(":/icons/close"), "", titleBar);
+    closeBtn->setObjectName("closeButton");
+    hbox->addWidget(closeBtn);
+    // 最小化
+    auto *minBtn = new QPushButton(QIcon(":/icons/yellow"), "", titleBar);
+    minBtn->setObjectName("minimizeButton");
+    hbox->addWidget(minBtn);
+    // 最大化/还原
+    auto *maxBtn = new QPushButton(QIcon(":/icons/max"), "", titleBar);
+    maxBtn->setObjectName("maximizeButton");
+    hbox->addWidget(maxBtn);
+
+    hbox->addStretch();
+
+    // 信号连接
+    connect(minBtn, &QPushButton::clicked, this, &QWidget::showMinimized);
+    connect(maxBtn, &QPushButton::clicked, this, [this](){
+        isMaximized() ? showNormal() : showMaximized();
+    });
+    connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
+
+
     m_networkManager = new QNetworkAccessManager(this);
     // —— 新增：创建并隐藏控制面板对话框 ——
     controlDialog = new ControlPanelDialog(this);
@@ -189,7 +224,7 @@ void MediaWindow::togglePlayPause()
     }
 
     // 更新按钮文本
-    playButton->setText(demuxWorker->isPause ? "Play" : "Pause");
+    playButton->setIcon(QIcon(demuxWorker->isPause ? ":/icons/play" : ":/icons/pause"));
 }
 
 void MediaWindow::updateTimeLabel(double currentTime, double totalTime)
@@ -254,7 +289,7 @@ void MediaWindow::startPlay()
     {
         demuxThread->start();
         emit sigStartPlay();
-        playButton->setText("pause");
+        playButton->setIcon(QIcon(":/icons/pause"));
         playButton->setEnabled(true);
     }
 }
@@ -287,7 +322,7 @@ void MediaWindow::stopPlay()
 
     // 恢复按钮状态
     playButton->setEnabled(true);
-    playButton->setText("Play");
+    playButton->setIcon(QIcon(":/icons/play"));
 
 #ifdef Q_OS_WIN
     // 释放转换相关资源
@@ -778,8 +813,9 @@ void MediaWindow::setupUI()
     // 主布局
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+    mainLayout->addWidget(titleBar);
     mainLayout->addWidget(mainSplitter);
-
     setLayout(mainLayout);
     this->setMinimumSize(800, 600);
 }
@@ -941,15 +977,34 @@ void MediaWindow::setupControlPanel()
 
     // 第二排：按钮
     QHBoxLayout *row2Layout = new QHBoxLayout();
-    openButton = createButton(tr("Open File"));
-    playButton = createButton(tr("Play"));
-    stopButton = createButton(tr("Stop"));
-    rewindButton = createButton("<<");
-    forwardButton = createButton(">>");
+    openButton = new QPushButton(QIcon(":/icons/folder"), "", this);
+    playButton = new QPushButton(QIcon(":/icons/play"), "", this);
+    stopButton = new QPushButton(QIcon(":/icons/stop"), "", this);
+    rewindButton = new QPushButton(QIcon(":/icons/rewind"), "", this);
+    forwardButton = new QPushButton(QIcon(":/icons/forward"), "", this);
     selectStreamButton = createButton(tr("选择流"));
     loadSubtitleButton = createButton(tr("加载外挂字幕"));
 
+    openButton->setObjectName("openButton");
+    openButton->setIconSize(QSize(32,32));
+    openButton->setToolTip(tr("Open File"));
+
+    playButton->setObjectName("playButton");
+    playButton->setIconSize(QSize(32,32));
+    playButton->setToolTip(tr("Play"));
     playButton->setEnabled(false);
+
+    stopButton->setObjectName("stopButton");
+    stopButton->setIconSize(QSize(32,32));
+    stopButton->setToolTip(tr("Stop"));
+
+    rewindButton->setObjectName("rewindButton");
+    rewindButton->setIconSize(QSize(32,32));
+    rewindButton->setToolTip(tr("rewind"));
+
+    forwardButton->setObjectName("forwardButton");
+    forwardButton->setIconSize(QSize(32,32));
+    forwardButton->setToolTip(tr("forward"));
 
     row2Layout->addWidget(playButton);
     row2Layout->addWidget(stopButton);

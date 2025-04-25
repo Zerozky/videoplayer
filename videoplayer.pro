@@ -15,13 +15,15 @@ SOURCES += \
     cudavideowindow.cpp \
     demuxworker.cpp \
     main.cpp \
-    mediawindow.cpp
+    mediawindow.cpp \
+    titlebar.cpp
 
 HEADERS += \
     controlpaneldialog.h \
     cudavideowindow.h \
     demuxworker.h \
-    mediawindow.h
+    mediawindow.h \
+    titlebar.h
 
 # 翻译文件列表
 TRANSLATIONS += \
