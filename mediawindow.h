@@ -40,6 +40,10 @@ public:
     ~MediaWindow() ;
     ControlPanelDialog *controlDialog;
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 signals:
     void sigStartPlay();
     void sigSetFilePath(const QString &filePath);
@@ -75,6 +79,7 @@ public slots:
     void slotDisplaySubtitle(const QString &subtitleText, int durationMs);
     void slotDisplaySubtitleImage(const QImage &subtitleImage, int durationMs);
     void onLoadSubtitleButtonClicked();
+    void toggleFullScreen();
 
 private:
     // UI 部分
@@ -84,7 +89,8 @@ private:
     QFrame *videoFrame;           // 左上视频区域
     QFrame *controlFrame;         // 左下控制面板
 
-    QWidget* titleBar;
+    QWidget *titleBar;
+    QWidget *overlayContainer;
     // 右侧区域，包含两个页面
     QTabWidget *rightTabWidget;
     // 第一个页面：视频列表
@@ -159,11 +165,11 @@ private:
     int pausedSubtitleRemaining = 0;
     int pausedVerticalRemaining = 0;
 
-    void resizeEvent(QResizeEvent *event);
 
     QString externalSubtitlePath;    // 保存外挂字幕文件路径
 
     void loadFile(const QString &filePath);
+
 };
 
 #endif // MEDIAWINDOW_H

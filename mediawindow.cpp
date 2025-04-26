@@ -720,6 +720,23 @@ void MediaWindow::onLoadSubtitleButtonClicked()
 
 }
 
+void MediaWindow::toggleFullScreen()
+{
+    if (isFullScreen()) {
+        // 恢复窗口装饰
+        showNormal();
+        titleBar->show();
+        controlFrame->show();
+        rightTabWidget->show();
+    } else {
+        // 进入纯视频全屏
+        showFullScreen();
+        titleBar->hide();
+        controlFrame->hide();
+        rightTabWidget->hide();
+    }
+}
+
 void MediaWindow::setupUI()
 {
     // 创建主布局 Splitter
@@ -727,7 +744,7 @@ void MediaWindow::setupUI()
     leftSplitter = new QSplitter(Qt::Vertical);
 
     // 创建一个专门的 QWidget 用作视频和字幕叠加的容器
-    QWidget *overlayContainer = new QWidget(this);
+    overlayContainer = new QWidget(this);
     overlayContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     QStackedLayout *stackedLayout = new QStackedLayout(overlayContainer);
     // 设置叠加模式，让所有子控件同时显示
@@ -771,14 +788,16 @@ void MediaWindow::setupUI()
     QVBoxLayout *frameLayout = new QVBoxLayout(videoFrame);
     frameLayout->setContentsMargins(0, 0, 0, 0);
     frameLayout->addWidget(overlayContainer);
+    overlayContainer->installEventFilter(this);
 
     // 控制面板区域
     controlFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    //控制面板
+    // 控制面板
     setupControlPanel();
 
     // 创建右侧区域使用 QTabWidget
     rightTabWidget = new QTabWidget(this);
+    rightTabWidget->setAttribute(Qt::WA_StyledBackground, true);
     // 第一个页面：视频列表
     videoListWidget = new QListWidget(rightTabWidget);
     videoListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -912,6 +931,16 @@ void MediaWindow::resizeEvent(QResizeEvent *event)
         int y = containerH - h - 10;
         subtitleLabel->setGeometry(x, y, w, h);
     }
+}
+
+bool MediaWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    // 只处理 overlayContainer 的双击
+    if (watched == overlayContainer && event->type() == QEvent::MouseButtonDblClick) {
+        toggleFullScreen();
+        return true;   // 表示已处理
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void MediaWindow::loadFile(const QString &filePath)

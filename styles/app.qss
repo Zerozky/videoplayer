@@ -41,7 +41,7 @@ QPushButton:disabled {
     color: #888;
 }
 
-/* 保证按钮本身无边框，仅图标可见 */
+/* controlFrame中按钮 */
 QPushButton#playButton, QPushButton#stopButton,
 QPushButton#openButton, QPushButton#rewindButton, QPushButton#forwardButton {
     border: none;
@@ -62,7 +62,7 @@ QPushButton#playButton:disabled {
     background: none;
 }
 
-/* 按钮纯图标，无文字 */
+/* titleBar中按钮 */
 QPushButton#minimizeButton, QPushButton#maximizeButton, QPushButton#closeButton {
     background: transparent;
     border: none;
@@ -126,7 +126,7 @@ QLineEdit, QTextEdit {
 
 QTabWidget::pane {
     border: none;
-    background: #2b2b2b;
+    background: #c8d4e0;
 }
 QTabBar::tab {
     background: #3b3b3b;
