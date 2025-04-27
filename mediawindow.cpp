@@ -81,7 +81,7 @@ MediaWindow::MediaWindow(QWidget *parent) :
 
 
     m_networkManager = new QNetworkAccessManager(this);
-    // —— 新增：创建并隐藏控制面板对话框 ——
+    // 控制面板窗口
     controlDialog = new ControlPanelDialog(this);
     controlDialog->hide();
 
@@ -107,8 +107,10 @@ MediaWindow::MediaWindow(QWidget *parent) :
     // DeepSeek 按钮点击
     connect(deepSeekButton, &QPushButton::clicked, this, &MediaWindow::onDeepSeekButtonClicked);
 
-    connect(selectStreamButton, &QPushButton::clicked, this, &MediaWindow::onSelectStreamButtonClicked);
-    connect(loadSubtitleButton, &QPushButton::clicked, this, &MediaWindow::onLoadSubtitleButtonClicked);
+    connect(controlDialog, &ControlPanelDialog::selectStreamRequested,
+            this, &MediaWindow::onSelectStreamButtonClicked);
+    connect(controlDialog, &ControlPanelDialog::loadSubtitleRequested,
+            this, &MediaWindow::onLoadSubtitleButtonClicked);
 
     // —— 横排清除 ——
     subtitleClearTimer = new QTimer(this);
@@ -1023,8 +1025,6 @@ void MediaWindow::setupControlPanel()
     stopButton = new QPushButton(QIcon(":/icons/stop"), "", this);
     rewindButton = new QPushButton(QIcon(":/icons/rewind"), "", this);
     forwardButton = new QPushButton(QIcon(":/icons/forward"), "", this);
-    selectStreamButton = createButton(tr("选择流"));
-    loadSubtitleButton = createButton(tr("加载外挂字幕"));
 
     openButton->setObjectName("openButton");
     openButton->setIconSize(QSize(32,32));
@@ -1052,8 +1052,6 @@ void MediaWindow::setupControlPanel()
     row2Layout->addWidget(rewindButton);
     row2Layout->addWidget(forwardButton);
     row2Layout->addWidget(openButton);
-    row2Layout->addWidget(selectStreamButton);
-    row2Layout->addWidget(loadSubtitleButton);
     row2Layout->addStretch();
 
     // 信息标签
@@ -1064,7 +1062,10 @@ void MediaWindow::setupControlPanel()
     row2Layout->addWidget(codecInfoLabel);
 
     // 控制面板开关按钮
-    toggleControlPanelButton = new QPushButton(tr("Control Panel"), controlFrame);
+    toggleControlPanelButton = new QPushButton(QIcon(":/icons/general"),"",  controlFrame);
+    toggleControlPanelButton->setObjectName("toggleControlPanelButton");
+    toggleControlPanelButton->setIconSize(QSize(32,32));
+    toggleControlPanelButton->setToolTip(tr("Control Panel"));
 
     row2Layout->addWidget(toggleControlPanelButton);
 

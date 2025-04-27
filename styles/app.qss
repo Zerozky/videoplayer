@@ -23,12 +23,15 @@ QPushButton {
     border: none;
     border-radius: 4px;
     padding: 6px 12px;
+    color: #ffffff;
 }
 QPushButton:hover {
     background-color: #559bd1;
+    color: #ffffff;
 }
 QPushButton:pressed {
     background-color: #2a6280;
+    color: #ffffff;
 }
 QPushButton:disabled {
     background-color: #555;
@@ -36,19 +39,19 @@ QPushButton:disabled {
 }
 
 /* controlFrame中按钮 */
-QPushButton#playButton, QPushButton#stopButton,
-QPushButton#openButton, QPushButton#rewindButton, QPushButton#forwardButton {
+QPushButton#playButton, QPushButton#stopButton, QPushButton#openButton,
+QPushButton#rewindButton, QPushButton#forwardButton, QPushButton#toggleControlPanelButton {
     border: none;
     background: transparent;
     width: 32px; height: 32px;
     padding: 0px 4px;
 }
-QPushButton#playButton:hover, QPushButton#stopButton:hover,
-QPushButton#openButton:hover, QPushButton#rewindButton:hover, QPushButton#forwardButton:hover {
+QPushButton#playButton:hover, QPushButton#stopButton:hover, QPushButton#openButton:hover, 
+QPushButton#rewindButton:hover, QPushButton#forwardButton:hover, QPushButton#toggleControlPanelButton:hover {
     background: rgba(60, 127, 177, 0.2);
 }
-QPushButton#playButton:pressed, QPushButton#stopButton:pressed,
-QPushButton#openButton:pressed, QPushButton#rewindButton:pressed, QPushButton#forwardButton:pressed {
+QPushButton#playButton:pressed, QPushButton#stopButton:pressed, QPushButton#openButton:pressed,
+QPushButton#rewindButton:pressed, QPushButton#forwardButton:pressed, QPushButton#toggleControlPanelButton:pressed {
     background: rgba(42, 98, 128, 0.3);
 }
 QPushButton#playButton:disabled {

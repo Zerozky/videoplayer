@@ -9,6 +9,8 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
 {
     setWindowTitle(tr("Control Panel"));
     setModal(false);
+    // 设置固定宽度，方便 UI 排列
+    setFixedWidth(500);
     // 整体布局
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
@@ -70,11 +72,11 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
     connect(sizeBox, &QSpinBox::valueChanged,
             this, &ControlPanelDialog::subtitleFontSizeChanged);
 
-    // 设置固定宽度，方便 UI 排列
-    setFixedWidth(500);
 
-    QHBoxLayout *rowLang = new QHBoxLayout;
-    rowLang->addWidget(new QLabel(tr("Language:"), this));
+
+    // 第四行：程序语言选择
+    QHBoxLayout *row4 = new QHBoxLayout;
+    row4->addWidget(new QLabel(tr("Language:"), this));
     QComboBox *comboLang = new QComboBox(this);
     comboLang->addItem(QStringLiteral("简体中文"), "zh_CN");
     comboLang->addItem(QStringLiteral("English"), "en_US");
@@ -87,11 +89,24 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
     if (idx >= 0) {
         comboLang->setCurrentIndex(idx);
     }
-    rowLang->addWidget(comboLang);
-    mainLayout->addLayout(rowLang);
+    row4->addWidget(comboLang);
+    mainLayout->addLayout(row4);
 
     connect(comboLang, QOverload<int>::of(&QComboBox::currentIndexChanged),this, [comboLang, this](int){
         emit languageChanged(comboLang->currentData().toString());
     });
+
+    // 第五行：选择流 外挂字幕
+    QHBoxLayout *row5 = new QHBoxLayout;
+    QPushButton *btnSelectStream  = new QPushButton(tr("选择流"), this);
+    QPushButton *btnLoadSubtitle  = new QPushButton(tr("加载外挂字幕"), this);
+    row5->addWidget(btnSelectStream);
+    row5->addWidget(btnLoadSubtitle);
+    mainLayout->addLayout(row5);
+
+    connect(btnSelectStream, &QPushButton::clicked,
+            this, &ControlPanelDialog::selectStreamRequested);
+    connect(btnLoadSubtitle, &QPushButton::clicked,
+            this, &ControlPanelDialog::loadSubtitleRequested);
 
 }

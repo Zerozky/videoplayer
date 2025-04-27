@@ -19,6 +19,8 @@ signals:
     void subtitleFontChanged(const QFont &font);
     void subtitleFontSizeChanged(int size);
     void languageChanged(const QString &locale);
+    void selectStreamRequested();
+    void loadSubtitleRequested();
 };
 
 #endif // CONTROLPANELDIALOG_H
