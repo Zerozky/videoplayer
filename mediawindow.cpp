@@ -35,7 +35,13 @@ extern "C" {
 MediaWindow::MediaWindow(QWidget *parent) :
     QWidget(parent)
 {
-    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint);
+    setWindowFlags(
+        Qt::Window
+        | Qt::FramelessWindowHint
+        | Qt::WindowSystemMenuHint
+        | Qt::WindowMinimizeButtonHint
+        | Qt::WindowMaximizeButtonHint
+        );
 
     // 创建标题栏
     titleBar = new TitleBar(this);
@@ -60,6 +66,9 @@ MediaWindow::MediaWindow(QWidget *parent) :
     hbox->addWidget(maxBtn);
 
     hbox->addStretch();
+    auto *titleLabel = new QLabel(window()->windowTitle(), this);
+    titleLabel->setObjectName("titleLabel");
+    hbox->addWidget(titleLabel);
 
     // 信号连接
     connect(minBtn, &QPushButton::clicked, this, &QWidget::showMinimized);
@@ -67,6 +76,8 @@ MediaWindow::MediaWindow(QWidget *parent) :
         isMaximized() ? showNormal() : showMaximized();
     });
     connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
+    connect(window(), &QWidget::windowTitleChanged,
+            titleLabel, &QLabel::setText);
 
 
     m_networkManager = new QNetworkAccessManager(this);
@@ -537,13 +548,6 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText, int durationM
 
     // 设置文字和样式
     subtitleLabel->setWordWrap(true);
-    QFont font = subtitleLabel->font();
-#ifdef Q_OS_MAC
-    font.setPointSize(38);
-#else
-    font.setPointSize(20);
-#endif
-    subtitleLabel->setFont(font);
 
     // 创建一个阴影效果对象
     QGraphicsDropShadowEffect *shadowEffect = new QGraphicsDropShadowEffect(subtitleLabel);
@@ -562,6 +566,7 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText, int durationM
     int ch = overlay->height();
     int maxW = int(cw * 0.8);
 
+    QFont font = subtitleLabel->font();
     QFontMetrics fm(font);
     // 这里第二个参数给一个足够大的高度，word-wrap 会自动换行
     QRect br = fm.boundingRect(0, 0, maxW, ch,
@@ -765,10 +770,16 @@ void MediaWindow::setupUI()
     stackedLayout->addWidget(videoLabel);
 #endif
 
+#ifdef Q_OS_WIN
+    QFont initFont("Arial", 20);  // 默认 20pt
+#elif defined(Q_OS_MAC)
+    QFont initFont("Arial", 38);
+#endif
     // 创建横排字幕 Label
     subtitleLabel = new QLabel(overlayContainer);
     subtitleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
     subtitleLabel->setStyleSheet("background-color: transparent; color: white;");
+    subtitleLabel->setFont(initFont);
     subtitleLabel->setAlignment(Qt::AlignCenter);
     subtitleLabel->setWordWrap(true);
     subtitleLabel->setParent(overlayContainer);
@@ -778,7 +789,8 @@ void MediaWindow::setupUI()
     // 创建竖排字幕 Label
     verticalSubtitleLabel = new QLabel(overlayContainer);
     verticalSubtitleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
-    verticalSubtitleLabel->setStyleSheet("background-color: transparent; color: white; font-size: 18px;");
+    verticalSubtitleLabel->setStyleSheet("background-color: transparent; color: white;");
+    verticalSubtitleLabel->setFont(initFont);
     verticalSubtitleLabel->setParent(overlayContainer);
     verticalSubtitleLabel->hide();
     verticalSubtitleLabel->raise();
