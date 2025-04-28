@@ -302,10 +302,10 @@ void MediaWindow::stopPlay()
 
     delete demuxWorker;
     demuxWorker = nullptr;
-    qDebug() << "demuxThread cleared";
+    qDebug() << "解码器已释放";
     delete demuxThread;
     demuxThread = nullptr;
-    qDebug() << "demuxWorker cleared";
+    qDebug() << "解码进程已退出";
 
     // 恢复按钮状态
     playButton->setEnabled(true);
@@ -333,7 +333,6 @@ int MediaWindow::initVideoDisplay(int mWidth,int mHeight)
 {
     videoWidth = mWidth;
     videoHeight = mHeight;
-    qDebug() << "initVideoDisplay: videoWidth =" << videoWidth << ", videoHeight =" << videoHeight;
 
     return 0;
 }
@@ -779,7 +778,9 @@ void MediaWindow::setupUI()
     overlayContainer->installEventFilter(this);
 
     // 控制面板区域
-    controlFrame = createFrame(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    controlFrame = new QFrame();
+    controlFrame->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
+    controlFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     // 控制面板
     setupControlPanel();
 
@@ -1054,14 +1055,6 @@ void MediaWindow::setupControlPanel()
     controlLayout->addLayout(row2Layout);
 }
 
-QFrame *MediaWindow::createFrame(QSizePolicy::Policy hPolicy, QSizePolicy::Policy vPolicy)
-{
-    QFrame* frame = new QFrame();
-    frame->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
-    frame->setSizePolicy(hPolicy, vPolicy);
-    return frame;
-}
-
 QSlider *MediaWindow::createSlider(int min, int max, int value)
 {
     QSlider* slider = new QSlider(Qt::Horizontal);
@@ -1069,11 +1062,6 @@ QSlider *MediaWindow::createSlider(int min, int max, int value)
     slider->setValue(value);
     slider->setTracking(true);  // 确保拖动时能发送信号
     return slider;
-}
-
-QPushButton *MediaWindow::createButton(const QString &text)
-{
-    return new QPushButton(text);
 }
 
 #ifdef Q_OS_WIN

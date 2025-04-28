@@ -799,7 +799,6 @@ void DemuxWorker::slotDoWork()
                         duration = qMax(duration, 5000);
                         // 发射图像字幕信号
                         emit sigSubtitleImage(img, duration);
-                        qDebug() << "发射图像字幕信号";
                     }
                     // 如果是 ASS 字幕（或普通文本字幕）
                     else if (rect->type == SUBTITLE_ASS) {

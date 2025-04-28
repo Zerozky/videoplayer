@@ -137,9 +137,6 @@ QComboBox QAbstractItemView {
 }
 
 /* 标签 */
-QLabel {
-    padding: 2px;
-}
 QLabel#titleLabel {
     background: transparent;
     font-size: 11pt;

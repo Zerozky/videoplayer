@@ -35,16 +35,16 @@ int main(int argc, char *argv[])
 
     // 监听语言切换
     QObject::connect(mediaWindow->controlDialog, &ControlPanelDialog::languageChanged, &a, [&](const QString &locale){
-        // 1) 存下用户的选择
+        // 存下语言
         QSettings settings("MyCompany", "MyApp");
         settings.setValue("AppLanguage", locale);
 
-        // 2) 用同样的参数重启自己
+        // 重启
         QString exe = QCoreApplication::applicationFilePath();
         QStringList args = QCoreApplication::arguments();
         QProcess::startDetached(exe, args);
 
-        // 3) 退出当前进程
+        // 退出当前进程
         a.quit();
     });
 

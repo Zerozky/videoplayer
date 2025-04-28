@@ -90,8 +90,10 @@ private:
     QFrame *videoFrame;           // 左上视频区域
     QFrame *controlFrame;         // 左下控制面板
 
+    // 标题栏
     TitleBar *titleBar;
     QWidget *overlayContainer;
+
     // 右侧区域，包含两个页面
     QTabWidget *rightTabWidget;
     // 第一个页面：视频列表
@@ -108,43 +110,34 @@ private:
     QLabel *videoLabel; // 其他平台使用QLabel
 #endif
 
-    QSlider *progressSlider;
-    QSlider *volumeSlider;
+    QSlider *progressSlider;    // 进度条
+    QSlider *volumeSlider;      // 音量条
 
-    QPushButton *stopButton;
-    QPushButton *openButton;
-    QPushButton *playButton;      // 播放/暂停 按钮
-    QPushButton *rewindButton;    // 快退 按钮
-    QPushButton *forwardButton;   // 快进 按钮
-    QPushButton *selectStreamButton;    // 选择流 按钮
-    QPushButton *loadSubtitleButton;    // 加载外挂字幕 按钮
+    QPushButton *playButton;    // 播放、暂停按钮
+    QPushButton *stopButton;    // 停止按钮
+    QPushButton *forwardButton; // 快进按钮
+    QPushButton *rewindButton;  // 快退按钮
+    QPushButton *openButton;    // 打开文件按钮
+    QPushButton *toggleControlPanelButton;  // 打开、隐藏控制面板
 
-    QLabel *timeInfoLabel;        // 视频当前时间 / 总时长
-    QLabel *codecInfoLabel;       // 音视频编码器信息
-    QLabel* subtitleLabel;        // 横排字幕
-    QLabel* verticalSubtitleLabel;   // 竖排字幕
-
-    QPushButton *toggleControlPanelButton; // 打开/隐藏控制面板
+    QLabel *timeInfoLabel;      // 视频当前时间 / 总时长
+    QLabel *codecInfoLabel;     // 音视频编码器信息
+    QLabel* subtitleLabel;      // 横排字幕
+    QLabel* verticalSubtitleLabel;  // 竖排字幕
 
     void setupUI();
     void setupControlPanel();
-    QFrame* createFrame(QSizePolicy::Policy hPolicy, QSizePolicy::Policy vPolicy);
     QSlider* createSlider(int min, int max, int value);
-    QPushButton* createButton(const QString& text);
+
+    QThread *demuxThread = nullptr;     // 播放线程
+    DemuxWorker *demuxWorker = nullptr; // 解码器
     void setupConnections();    // 线程信号连接
 
-
-    // 播放线程和解码器对象
-    QThread *demuxThread = nullptr;
-    DemuxWorker *demuxWorker = nullptr;
-    QString selectedFilePath;
-
-    // QImage 渲染方案时保存视频原始宽高
-    int videoWidth = 0;
-    int videoHeight = 0;
-
-    double totalDuration = 0; // 保存视频总时长（单位：秒）
-    bool sliderBeingDragged = false;  // 标记进度条是否正在被拖动
+    QString selectedFilePath;   // 视频文件路径
+    int videoWidth = 0;     // 视频原始宽度
+    int videoHeight = 0;    // 视频原始高度
+    double totalDuration = 0; // 视频总时长（秒）
+    bool sliderBeingDragged = false;  // 进度条是否被拖动
 
     QNetworkAccessManager *m_networkManager = nullptr;
 
@@ -158,16 +151,14 @@ private:
     void restartPlaybackAfterStreamSelection();
     QString getStreamDescription(AVStream *stream);
 
-    int selectedVideoStream;
-    int selectedAudioStream;
-    int selectedSubtitleStream;
-    QTimer *subtitleClearTimer;     // 清除横排字幕
-    QTimer* verticalClearTimer;     // 清除竖排字幕
+    int selectedVideoStream;    // 选择的视频流
+    int selectedAudioStream;    // 选择的音频流
+    int selectedSubtitleStream; // 选择的字幕流
+    QTimer *subtitleClearTimer;     // 横排字幕计时器
+    QTimer* verticalClearTimer;     // 竖排字幕计时器
     int pausedSubtitleRemaining = 0;
     int pausedVerticalRemaining = 0;
-
-
-    QString externalSubtitlePath;    // 保存外挂字幕文件路径
+    QString externalSubtitlePath;    // 外挂字幕文件路径
 
     void loadFile(const QString &filePath);
 
