@@ -10,6 +10,11 @@ class TitleBar : public QWidget
 public:
     explicit TitleBar(QWidget *parent = nullptr);
 
+signals:
+    void sigMinimized();
+    void sigtoggleMaximized();
+    void sigclose();
+
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;

@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QNetworkAccessManager>
 #include "demuxworker.h"
+#include "titlebar.h"
 #ifdef Q_OS_WIN
 #include "cudavideowindow.h"
 #endif
@@ -89,7 +90,7 @@ private:
     QFrame *videoFrame;           // 左上视频区域
     QFrame *controlFrame;         // 左下控制面板
 
-    QWidget *titleBar;
+    TitleBar *titleBar;
     QWidget *overlayContainer;
     // 右侧区域，包含两个页面
     QTabWidget *rightTabWidget;

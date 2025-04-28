@@ -47,37 +47,12 @@ MediaWindow::MediaWindow(QWidget *parent) :
     titleBar = new TitleBar(this);
     titleBar->setObjectName("titleBar");
     titleBar->setAttribute(Qt::WA_StyledBackground, true);
-
-    // 水平布局 关闭/最小化/最大化
-    auto *hbox = new QHBoxLayout(titleBar);
-    hbox->setContentsMargins(0, 0, 0, 0);
-    hbox->setSpacing(0);
-    // 关闭
-    auto *closeBtn = new QPushButton(QIcon(":/icons/close"), "", titleBar);
-    closeBtn->setObjectName("closeButton");
-    hbox->addWidget(closeBtn);
-    // 最小化
-    auto *minBtn = new QPushButton(QIcon(":/icons/yellow"), "", titleBar);
-    minBtn->setObjectName("minimizeButton");
-    hbox->addWidget(minBtn);
-    // 最大化/还原
-    auto *maxBtn = new QPushButton(QIcon(":/icons/max"), "", titleBar);
-    maxBtn->setObjectName("maximizeButton");
-    hbox->addWidget(maxBtn);
-
-    hbox->addStretch();
-    auto *titleLabel = new QLabel(window()->windowTitle(), this);
-    titleLabel->setObjectName("titleLabel");
-    hbox->addWidget(titleLabel);
-
     // 信号连接
-    connect(minBtn, &QPushButton::clicked, this, &QWidget::showMinimized);
-    connect(maxBtn, &QPushButton::clicked, this, [this](){
+    connect(titleBar, &TitleBar::sigMinimized, this, &MediaWindow::showMinimized);
+    connect(titleBar, &TitleBar::sigtoggleMaximized, this, [this](){
         isMaximized() ? showNormal() : showMaximized();
     });
-    connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
-    connect(window(), &QWidget::windowTitleChanged,
-            titleLabel, &QLabel::setText);
+    connect(titleBar, &TitleBar::sigclose, this, &MediaWindow::close);
 
 
     m_networkManager = new QNetworkAccessManager(this);
@@ -886,7 +861,6 @@ void MediaWindow::setupConnections()
     // 由控制面板发送倍速信息
     connect(controlDialog, &ControlPanelDialog::setPlaybackSpeed,
             demuxWorker,   &DemuxWorker::setPlaybackSpeed, Qt::QueuedConnection);
-
 }
 
 void MediaWindow::restartPlaybackAfterStreamSelection()

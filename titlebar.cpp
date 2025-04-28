@@ -1,9 +1,42 @@
 #include "titlebar.h"
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QLabel>
 
 TitleBar::TitleBar(QWidget *parent)
     : QWidget{parent}, m_dragging(false)
 {
     setFixedHeight(24);
+
+    // 水平布局 关闭/最小化/最大化
+    auto *hbox = new QHBoxLayout(this);
+    hbox->setContentsMargins(0, 0, 0, 0);
+    hbox->setSpacing(0);
+    // 关闭
+    auto *closeBtn = new QPushButton(QIcon(":/icons/close"), "", this);
+    closeBtn->setObjectName("closeButton");
+    hbox->addWidget(closeBtn);
+    // 最小化
+    auto *minBtn = new QPushButton(QIcon(":/icons/yellow"), "", this);
+    minBtn->setObjectName("minimizeButton");
+    hbox->addWidget(minBtn);
+    // 最大化/还原
+    auto *maxBtn = new QPushButton(QIcon(":/icons/max"), "", this);
+    maxBtn->setObjectName("maximizeButton");
+    hbox->addWidget(maxBtn);
+
+    hbox->addStretch();
+    auto *titleLabel = new QLabel(window()->windowTitle(), this);
+    titleLabel->setObjectName("titleLabel");
+    hbox->addWidget(titleLabel);
+
+    // 信号连接
+    connect(minBtn, &QPushButton::clicked, this, &TitleBar::sigMinimized);
+    connect(maxBtn, &QPushButton::clicked, this, &TitleBar::sigtoggleMaximized);
+    connect(closeBtn, &QPushButton::clicked, this, &TitleBar::sigclose);
+    connect(window(), &QWidget::windowTitleChanged,
+            titleLabel, &QLabel::setText);
+
 }
 
 void TitleBar::mousePressEvent(QMouseEvent *event)
