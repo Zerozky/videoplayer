@@ -86,47 +86,41 @@ MediaWindow::MediaWindow(QWidget *parent) :
     controlDialog->hide();
 
     setupUI();
+
+    // 有关DemuxWorker的链接
     setupConnections();
 
-    // 按钮连接
-    connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
-    connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
-    connect(playButton, &QPushButton::clicked, this, &MediaWindow::togglePlayPause);
-
-    // 连接进度条和音量滑块事件
+    // 控制台
     connect(progressSlider, &QSlider::sliderReleased, this, &MediaWindow::onProgressSliderReleased);
-    connect(volumeSlider, &QSlider::valueChanged, this, &MediaWindow::onVolumeSliderChanged);
-    connect(rewindButton, &QPushButton::clicked, this, &MediaWindow::onRewindButtonClicked);
-    connect(forwardButton, &QPushButton::clicked, this, &MediaWindow::onForwardButtonClicked);
     connect(progressSlider, &QSlider::sliderPressed, this, [this]() {
         sliderBeingDragged = true;
     });
+    connect(volumeSlider, &QSlider::valueChanged, this, &MediaWindow::onVolumeSliderChanged);
+    connect(playButton, &QPushButton::clicked, this, &MediaWindow::togglePlayPause);
+    connect(stopButton, &QPushButton::clicked, this, &MediaWindow::stopPlay);
+    connect(rewindButton, &QPushButton::clicked, this, &MediaWindow::onRewindButtonClicked);
+    connect(forwardButton, &QPushButton::clicked, this, &MediaWindow::onForwardButtonClicked);
+    connect(openButton, &QPushButton::clicked, this, &MediaWindow::openFile);
 
     // 右侧视频列表双击切换
     connect(videoListWidget, &QListWidget::itemDoubleClicked, this, &MediaWindow::onVideoListDoubleClicked);
-    // DeepSeek 按钮点击
+    // DeepSeek提问按钮
     connect(deepSeekButton, &QPushButton::clicked, this, &MediaWindow::onDeepSeekButtonClicked);
 
-    connect(controlDialog, &ControlPanelDialog::selectStreamRequested,
-            this, &MediaWindow::onSelectStreamButtonClicked);
-    connect(controlDialog, &ControlPanelDialog::loadSubtitleRequested,
-            this, &MediaWindow::onLoadSubtitleButtonClicked);
-
-    // —— 横排清除 ——
+    // 横排字幕清除
     subtitleClearTimer = new QTimer(this);
     subtitleClearTimer->setSingleShot(true);
     connect(subtitleClearTimer, &QTimer::timeout, this, [this]() {
         subtitleLabel->clear();
     });
-
-    // —— 竖排清除 ——
+    // 竖排字幕清除
     verticalClearTimer = new QTimer(this);
     verticalClearTimer->setSingleShot(true);
     connect(verticalClearTimer, &QTimer::timeout, this, [this]() {
         verticalSubtitleLabel->clear();
     });
 
-    // 点击按钮弹出/隐藏
+    // 点击按钮弹出/隐藏控制面板
     connect(toggleControlPanelButton, &QPushButton::clicked, this, [this](){
         if (controlDialog->isVisible()) {
             controlDialog->hide();
@@ -136,11 +130,16 @@ MediaWindow::MediaWindow(QWidget *parent) :
         }
     });
 
-    // —— 新增：把 ControlPanelDialog 的信号连到现有槽 ——
+    // 控制面板信号
+    // “选择流”按钮
+    connect(controlDialog, &ControlPanelDialog::selectStreamRequested,
+            this, &MediaWindow::onSelectStreamButtonClicked);
+    // “加载外挂字幕”按钮
+    connect(controlDialog, &ControlPanelDialog::loadSubtitleRequested,
+            this, &MediaWindow::onLoadSubtitleButtonClicked);
+    // 快进快退按钮
     connect(controlDialog, &ControlPanelDialog::seekRelative,
             this, [this](double off){ emit sigSeekRelative(off); });
-
-
     // 字幕字体/字号
     connect(controlDialog, &ControlPanelDialog::subtitleFontChanged, this, [this](const QFont &f){
         subtitleLabel->setFont(f);
@@ -855,27 +854,36 @@ void MediaWindow::setupUI()
 
 void MediaWindow::setupConnections()
 {
+    // 接收获取视频尺寸
     connect(demuxWorker, &DemuxWorker::sigGetVideoInfo, this, &MediaWindow::initVideoDisplay);
+    // 接收视频帧并渲染
 #ifdef Q_OS_WIN
     connect(demuxWorker, &DemuxWorker::sigGetFrame, this, &MediaWindow::updateCudaVideo);
 #else
     connect(demuxWorker, &DemuxWorker::sigGetFrame, this, &MediaWindow::updateVideo);
 #endif
+    // 发送播放信号
     connect(this, &MediaWindow::sigStartPlay, demuxWorker, &DemuxWorker::slotDoWork);
+    // 发送文件路径
     connect(this, &MediaWindow::sigSetFilePath, demuxWorker, &DemuxWorker::setFilePath);
-
-    // 接收播放时间更新和编解码器信息
+    // 接收播放时间
     connect(demuxWorker, &DemuxWorker::sigUpdateTime, this, &MediaWindow::updateTimeLabel);
+    // 接收编解码器信息
     connect(demuxWorker, &DemuxWorker::sigCodecInfo, this, &MediaWindow::updateCodecInfo);
-
+    // 发送跳转目标时间
     connect(this, &MediaWindow::sigSeekTo, demuxWorker, &DemuxWorker::seekTo, Qt::QueuedConnection);
+    // 发送相对跳转时间
     connect(this, &MediaWindow::sigSeekRelative, demuxWorker, &DemuxWorker::seekRelative, Qt::QueuedConnection);
+    // 发送声音大小
     connect(this, &MediaWindow::sigSetVolume, demuxWorker, &DemuxWorker::setVolume, Qt::QueuedConnection);
+    // 接收文字字幕
     connect(demuxWorker, &DemuxWorker::sigSubtitle, this, &MediaWindow::slotDisplaySubtitle);
+    // 接收图片字幕
     connect(demuxWorker, &DemuxWorker::sigSubtitleImage, this, &MediaWindow::slotDisplaySubtitleImage);
+    // 发送外挂字幕路径
     connect(this, &MediaWindow::sigLoadExternalSubtitle,
             demuxWorker, &DemuxWorker::setExternalSubtitle);
-    // 倍速
+    // 由控制面板发送倍速信息
     connect(controlDialog, &ControlPanelDialog::setPlaybackSpeed,
             demuxWorker,   &DemuxWorker::setPlaybackSpeed, Qt::QueuedConnection);
 
