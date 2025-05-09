@@ -29,59 +29,59 @@
         <translation>1分 &gt;&gt;</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="37"/>
+        <location filename="../controlpaneldialog.cpp" line="36"/>
         <source>0.5×</source>
         <translation>0.5倍</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="38"/>
+        <location filename="../controlpaneldialog.cpp" line="37"/>
         <source>1×</source>
         <translation>1倍</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="39"/>
+        <location filename="../controlpaneldialog.cpp" line="38"/>
         <source>1.5×</source>
         <translation>1.5倍</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="40"/>
+        <location filename="../controlpaneldialog.cpp" line="39"/>
         <source>3×</source>
         <translation>3倍</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="41"/>
+        <location filename="../controlpaneldialog.cpp" line="40"/>
         <source>Speed: 1.0×</source>
         <translation>再生速度 1.0x</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="51"/>
+        <location filename="../controlpaneldialog.cpp" line="50"/>
         <source>Speed: %1×</source>
         <translation>再生速度 %1x</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="64"/>
+        <location filename="../controlpaneldialog.cpp" line="63"/>
         <source>Font:</source>
         <translation>フォント:</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="66"/>
+        <location filename="../controlpaneldialog.cpp" line="65"/>
         <source>Size:</source>
         <translation>フォントサイズ:</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="79"/>
+        <location filename="../controlpaneldialog.cpp" line="76"/>
         <source>Language:</source>
         <translation>言語:</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="101"/>
+        <location filename="../controlpaneldialog.cpp" line="98"/>
         <source>选择流</source>
-        <translation type="unfinished">ストリーム</translation>
+        <translation>ストリーム</translation>
     </message>
     <message>
-        <location filename="../controlpaneldialog.cpp" line="102"/>
+        <location filename="../controlpaneldialog.cpp" line="99"/>
         <source>加载外挂字幕</source>
-        <translation type="unfinished">外部字幕</translation>
+        <translation>外部字幕</translation>
     </message>
 </context>
 <context>
@@ -97,133 +97,133 @@
         <translation></translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="468"/>
-        <location filename="../mediawindow.cpp" line="472"/>
+        <location filename="../mediawindow.cpp" line="452"/>
+        <location filename="../mediawindow.cpp" line="456"/>
         <source>错误</source>
         <translation>エラー</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="468"/>
+        <location filename="../mediawindow.cpp" line="452"/>
         <source>无法打开文件获取流信息。</source>
         <translation>ストリーム情報を取得するためにファイルを開くことができません。</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="472"/>
+        <location filename="../mediawindow.cpp" line="456"/>
         <source>无法获取流信息。</source>
         <translation>ストリーム情報を取得できません。</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="488"/>
+        <location filename="../mediawindow.cpp" line="472"/>
         <source>视频流：</source>
         <translation>ビデオストリーム:</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="490"/>
+        <location filename="../mediawindow.cpp" line="474"/>
         <source>音频流：</source>
         <translation>オーディオストリーム:</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="492"/>
+        <location filename="../mediawindow.cpp" line="476"/>
         <source>字幕流：</source>
         <translation>字幕ストリーム:</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="686"/>
+        <location filename="../mediawindow.cpp" line="670"/>
         <source>ASS Subtitles (*.ass *.ssa)</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="689"/>
+        <location filename="../mediawindow.cpp" line="673"/>
         <source>加载外挂字幕</source>
         <translation>外部字幕</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="794"/>
+        <location filename="../mediawindow.cpp" line="777"/>
         <source>Other Videos</source>
         <translation>他のビデオ</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="800"/>
+        <location filename="../mediawindow.cpp" line="783"/>
         <source>Enter DeepSeek query...</source>
         <translation>質問を入力してください...</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="801"/>
+        <location filename="../mediawindow.cpp" line="784"/>
         <source>Search</source>
         <translation>質問する</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="808"/>
+        <location filename="../mediawindow.cpp" line="791"/>
         <source>DeepSeek</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="885"/>
+        <location filename="../mediawindow.cpp" line="866"/>
         <source>索引 %1: </source>
         <translation>インデックス %1: </translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="888"/>
+        <location filename="../mediawindow.cpp" line="869"/>
         <source>视频</source>
         <translation>ビデオ</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="895"/>
+        <location filename="../mediawindow.cpp" line="875"/>
         <source>音频</source>
         <translation>オーディオ</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="897"/>
+        <location filename="../mediawindow.cpp" line="877"/>
         <source> - %1 Hz, %2通道</source>
         <translation> - %1 Hz、%2 チャネル</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="902"/>
+        <location filename="../mediawindow.cpp" line="882"/>
         <source>字幕</source>
         <translation>字幕</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="946"/>
+        <location filename="../mediawindow.cpp" line="924"/>
         <source>Media Player - %1</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="999"/>
+        <location filename="../mediawindow.cpp" line="976"/>
         <source>Volume</source>
         <translation>音量</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="1014"/>
+        <location filename="../mediawindow.cpp" line="991"/>
         <source>Open File</source>
         <translation>ファイル</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="1018"/>
+        <location filename="../mediawindow.cpp" line="995"/>
         <source>Play</source>
         <translation>再生</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="1023"/>
+        <location filename="../mediawindow.cpp" line="1000"/>
         <source>Stop</source>
         <translation>停止</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="458"/>
+        <location filename="../mediawindow.cpp" line="442"/>
         <source>选择流</source>
         <translation>ストリーム</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="1027"/>
+        <location filename="../mediawindow.cpp" line="1004"/>
         <source>rewind</source>
-        <translation type="unfinished"></translation>
+        <translation>5秒早送り</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="1031"/>
+        <location filename="../mediawindow.cpp" line="1008"/>
         <source>forward</source>
-        <translation type="unfinished"></translation>
+        <translation>5秒巻き戻し</translation>
     </message>
     <message>
-        <location filename="../mediawindow.cpp" line="1051"/>
+        <location filename="../mediawindow.cpp" line="1028"/>
         <source>Control Panel</source>
         <translation>パネル</translation>
     </message>
