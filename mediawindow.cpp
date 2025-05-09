@@ -115,7 +115,7 @@ MediaWindow::MediaWindow(QWidget *parent) :
     // 快进快退按钮
     connect(controlDialog, &ControlPanelDialog::seekRelative,
             this, [this](double off){ emit sigSeekRelative(off); });
-    // 字幕字体/字号
+    // 字幕字体、字号
     connect(controlDialog, &ControlPanelDialog::subtitleFontChanged, this, [this](const QFont &f){
         subtitleLabel->setFont(f);
         verticalSubtitleLabel->setFont(f);
@@ -150,7 +150,7 @@ MediaWindow::~MediaWindow()
 
 void MediaWindow::openFile()
 {
-    // 1) 禁用 Open 按钮，防止重入
+    // 禁用 Open 按钮，防止重入
     openButton->setEnabled(false);
 
 #ifdef Q_OS_WIN
@@ -178,7 +178,7 @@ void MediaWindow::openFile()
         );
     openButton->setEnabled(true);
     if (path.isEmpty()) return;
-    // 用统一接口载入
+    // 载入文件
     loadFile(path);
     // 更新侧边列表
     updateVideoList();
@@ -197,7 +197,7 @@ void MediaWindow::togglePlayPause()
     }
     demuxWorker->pauseMutex.unlock();
 
-    // —— 新增：暂停时 stop() 并记下剩余；恢复时 restart() ——
+    // 暂停时保存字幕剩余时间
     if (demuxWorker->isPause) {
         pausedSubtitleRemaining = subtitleClearTimer->remainingTime();
         subtitleClearTimer->stop();
@@ -216,7 +216,8 @@ void MediaWindow::togglePlayPause()
 
 void MediaWindow::updateTimeLabel(double currentTime, double totalTime)
 {
-    totalDuration = totalTime;  // 保存总时长
+    // 保存总时长
+    totalDuration = totalTime;
     // 格式化时间（以秒为单位，mm:ss 格式）
     QTime current(0, 0);
     current = current.addSecs(static_cast<int>(currentTime));
@@ -253,7 +254,7 @@ void MediaWindow::onProgressSliderReleased()
 
 void MediaWindow::onVolumeSliderChanged(int value)
 {
-    // 将 0~100 的值转换为 0~1 的音量
+    // 将 0-100 的值转换为 0-1 的音量
     double volume = value / 100.0;
     emit sigSetVolume(volume);
 }
@@ -283,23 +284,19 @@ void MediaWindow::startPlay()
 
 void MediaWindow::stopPlay()
 {
-    // 停 signal/slot，通知 worker 停掉循环
+    // 断开连接，通知 demuxWorker 停止播放
     if (demuxWorker) {
         disconnect(demuxWorker, nullptr, this, nullptr);
-        // 通知 worker 停止播放
         demuxWorker->isPlay = false;
         // 如果处于暂停状态，先唤醒，防止线程阻塞
         demuxWorker->pauseCondition.wakeAll();
     }
-
     // 请求线程中断并结束事件循环
     if (demuxThread) {
         demuxThread->requestInterruption();
         demuxThread->quit();
         demuxThread->wait();
     }
-
-
     delete demuxWorker;
     demuxWorker = nullptr;
     qDebug() << "解码器已释放";
@@ -346,7 +343,6 @@ void MediaWindow::onVideoListDoubleClicked(QListWidgetItem *item)
     // 停止当前播放
     stopPlay();
     loadFile(newFilePath);
-
 }
 
 void MediaWindow::onDeepSeekButtonClicked()
@@ -395,43 +391,31 @@ void MediaWindow::onDeepSeekButtonClicked()
             QByteArray response = reply->readAll();
             qDebug() << "DeepSeek API 返回:" << response;
             QJsonDocument responseDoc = QJsonDocument::fromJson(response);
-            qDebug() << "1";
             if(responseDoc.isNull() || !responseDoc.isObject()){
                 deepSeekResultText->setText("解析返回结果失败。返回内容: " + response);
-                qDebug() << "2";
             } else {
                 QJsonObject responseObj = responseDoc.object();
                 QString answer;
-                qDebug() << "3";
                 if(responseObj.contains("choices")){
                     QJsonArray choices = responseObj.value("choices").toArray();
-                    qDebug() << "4";
                     if(!choices.isEmpty()){
                         QJsonObject firstChoice = choices.first().toObject();
-                        qDebug() << "5";
                         if(firstChoice.contains("message")){
                             QJsonObject messageObj = firstChoice.value("message").toObject();
                             answer = messageObj.value("content").toString();
-                            qDebug() << "6";
                         }
                     }
                 }
-                qDebug() << "7";
                 if(answer.isEmpty()){
                     answer = "未返回答案，请检查查询参数或 API 状态。";
-                    qDebug() << "8";
                 }
                 deepSeekResultText->setText(answer);
-                qDebug() << "9";
             }
         } else {
             qDebug() << "DeepSeek 请求错误:" << reply->errorString();
             deepSeekResultText->setText("请求失败: " + reply->errorString());
         }
-        qDebug() << "10";
         reply->deleteLater();
-        // manager->deleteLater();
-        qDebug() << "11";
     });
 }
 
@@ -461,7 +445,7 @@ void MediaWindow::onSelectStreamButtonClicked()
     QComboBox *audioCombo = new QComboBox(&dialog);
     QComboBox *subtitleCombo = new QComboBox(&dialog);
 
-    // 利用 FFmpeg 打开当前文件，并获取流信息（注意释放资源）
+    // 利用 FFmpeg 打开当前文件，并获取流信息
     AVFormatContext *fmtCtx = nullptr;
     QByteArray filePathBytes = selectedFilePath.toLocal8Bit();
     if(avformat_open_input(&fmtCtx, filePathBytes.data(), nullptr, nullptr) != 0) {
@@ -535,7 +519,7 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText, int durationM
 
     subtitleLabel->setText(clean);
 
-    // 动态测算：宽度最多占容器 80%
+    // 宽度最多占容器 80%
     QWidget *overlay = videoFrame->layout()->itemAt(0)->widget();
     int cw = overlay->width();
     int ch = overlay->height();
@@ -543,12 +527,12 @@ void MediaWindow::slotDisplaySubtitle(const QString &subtitleText, int durationM
 
     QFont font = subtitleLabel->font();
     QFontMetrics fm(font);
-    // 这里第二个参数给一个足够大的高度，word-wrap 会自动换行
+    // word-wrap 自动换行
     QRect br = fm.boundingRect(0, 0, maxW, ch,
                                Qt::AlignCenter | Qt::TextWordWrap,
                                clean);
 
-    // 加点内边距
+    // 内边距
     int pad = 10;
     int w = br.width() + pad * 2;
     int h = br.height() + pad * 2;
@@ -581,13 +565,13 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int dura
     int origW = subtitleImage.width();
     int origH = subtitleImage.height();
 
-    // 判断竖排：只有当高度明显大于宽度时才视为竖排
+    // 判断竖排
     constexpr double verticalThreshold = 1.2;
     bool isVertical = (origH > origW * verticalThreshold);
 
     QPixmap pix;
     if (isVertical) {
-        // —— 竖排处理：占用 80% 高度，5% 宽度，右侧居中
+        // 竖排处理：占用 80% 高度，5% 宽度，右侧居中
 
         // 清除竖排旧字幕
         verticalSubtitleLabel->hide();
@@ -625,7 +609,7 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int dura
         verticalClearTimer->start(durationMs);
     }
     else {
-        // 横排处理：占用 80% 宽度，10% 高度，底部居中
+        // 横排处理：占用 80% 宽度，15% 高度，底部居中
 
         // 清除横排旧字幕
         subtitleLabel->hide();
@@ -639,7 +623,7 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int dura
         int targetW = qMin(int(origW * globalScale), origW);
         int targetH = qMin(int(origH * globalScale), origH);
 
-        // 宽度不超 80%
+        // 宽度不超 85%
         constexpr double maxWidthRatio = 0.85;
         int maxW = int(containerW * maxWidthRatio);
         if (targetW > maxW) {
@@ -648,7 +632,7 @@ void MediaWindow::slotDisplaySubtitleImage(const QImage &subtitleImage, int dura
             targetH = int(targetH * r);
         }
 
-        // 高度不超 10%
+        // 高度不超 15%
         constexpr double maxHeightRatio = 0.15;
         int maxH = int(containerH * maxHeightRatio);
         if (targetH > maxH) {
@@ -703,13 +687,13 @@ void MediaWindow::onLoadSubtitleButtonClicked()
 void MediaWindow::toggleFullScreen()
 {
     if (isFullScreen()) {
-        // 恢复窗口装饰
+        // 恢复窗口
         showNormal();
         titleBar->show();
         controlFrame->show();
         rightTabWidget->show();
     } else {
-        // 进入纯视频全屏
+        // 进入全屏
         showFullScreen();
         titleBar->hide();
         controlFrame->hide();
@@ -723,7 +707,7 @@ void MediaWindow::setupUI()
     mainSplitter = new QSplitter(Qt::Horizontal, this);
     leftSplitter = new QSplitter(Qt::Vertical);
 
-    // 创建一个专门的 QWidget 用作视频和字幕叠加的容器
+    // 创建 QWidget 用作视频和字幕叠加的容器
     overlayContainer = new QWidget(this);
     overlayContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     QStackedLayout *stackedLayout = new QStackedLayout(overlayContainer);
@@ -732,7 +716,6 @@ void MediaWindow::setupUI()
 
     // 视频显示区域
 #ifdef Q_OS_WIN
-    // 创建 CudaVideoWindow
     cudaVideoWindow = new CudaVideoWindow(overlayContainer);
     // 添加视频 widget 到叠加布局底层
     stackedLayout->addWidget(cudaVideoWindow);
@@ -746,7 +729,7 @@ void MediaWindow::setupUI()
 #endif
 
 #ifdef Q_OS_WIN
-    QFont initFont("Arial", 20);  // 默认 20pt
+    QFont initFont("Arial", 20);
 #elif defined(Q_OS_MAC)
     QFont initFont("Arial", 38);
 #endif
@@ -874,9 +857,7 @@ void MediaWindow::restartPlaybackAfterStreamSelection()
     setupConnections(); // 重新建立所有信号连接
     // 将新的流选择参数传递给新创建的 demuxWorker
     demuxWorker->setStreamIndices(selectedVideoStream, selectedAudioStream, selectedSubtitleStream);
-    // 传入当前选择的文件路径
     emit sigSetFilePath(selectedFilePath);
-    // 若需要，可以在此处传递当前播放位置（例如调用 seekTo(currentTime)）
     startPlay();
 }
 
@@ -887,7 +868,6 @@ QString MediaWindow::getStreamDescription(AVStream *stream)
     if (par->codec_type == AVMEDIA_TYPE_VIDEO) {
         desc += tr("视频");
         desc += QString(" (%1 x %2)").arg(stream->codecpar->width).arg(stream->codecpar->height);
-        // 可以读取附加信息，例如 codec id 的名称、可能的帧率等
         const AVCodec *codec = avcodec_find_decoder(par->codec_id);
         if(codec)
             desc += QString(" - %1").arg(codec->long_name);
@@ -900,7 +880,7 @@ QString MediaWindow::getStreamDescription(AVStream *stream)
             desc += QString(" - %1").arg(codec->long_name);
     } else if (par->codec_type == AVMEDIA_TYPE_SUBTITLE) {
         desc += tr("字幕");
-        // 可以从 metadata 中提取语言信息
+        // 从 metadata 中提取语言信息
         AVDictionaryEntry *langEntry = av_dict_get(stream->metadata, "language", nullptr, 0);
         if(langEntry)
             desc += QString(" (%1)").arg(langEntry->value);
@@ -909,13 +889,11 @@ QString MediaWindow::getStreamDescription(AVStream *stream)
             desc += QString(" - %1").arg(codec->long_name);
     }
     return desc;
-
 }
 
 void MediaWindow::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
-    // 假设 videoFrame 的布局中只有一个 overlayContainer
     if (!subtitleLabel->pixmap().isNull()) {
         QWidget *overlay = videoFrame->layout()->itemAt(0)->widget();
         int containerW = overlay->width();
@@ -935,7 +913,7 @@ bool MediaWindow::eventFilter(QObject *watched, QEvent *event)
     // 只处理 overlayContainer 的双击
     if (watched == overlayContainer && event->type() == QEvent::MouseButtonDblClick) {
         toggleFullScreen();
-        return true;   // 表示已处理
+        return true;
     }
     return QWidget::eventFilter(watched, event);
 }
@@ -945,7 +923,6 @@ void MediaWindow::loadFile(const QString &filePath)
     selectedFilePath = filePath;
     setWindowTitle(tr("Media Player - %1").arg(QFileInfo(filePath).fileName()));
 
-    // 4) 创建新线程和 worker，connect 信号，然后 start()
     demuxThread = new QThread(this);
     demuxWorker = new DemuxWorker;
     demuxWorker->moveToThread(demuxThread);
@@ -965,7 +942,7 @@ void MediaWindow::loadFile(const QString &filePath)
     setupConnections();
     emit sigSetFilePath(selectedFilePath);
 
-    // 自动寻找 .chs.ass 或 .cht.ass
+    // 自动寻找字幕
     QString base = QFileInfo(selectedFilePath).absolutePath() + "/" + QFileInfo(selectedFilePath).completeBaseName();
     QString chs = base + ".chs.ass";
     QString cht = base + ".cht.ass";
@@ -1060,7 +1037,8 @@ QSlider *MediaWindow::createSlider(int min, int max, int value)
     QSlider* slider = new QSlider(Qt::Horizontal);
     slider->setRange(min, max);
     slider->setValue(value);
-    slider->setTracking(true);  // 确保拖动时能发送信号
+    // 确保拖动时能发送信号
+    slider->setTracking(true);
     return slider;
 }
 
@@ -1087,7 +1065,7 @@ void MediaWindow::updateCudaVideo(AVFrame *pFrame)
         }
     }
 
-    // 计算转换缓冲区所需大小，并分配/复用页锁定内存
+    // 计算转换缓冲区所需大小，并复用页锁定内存
     int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGBA, dstW, dstH, 1);
     if (numBytes != m_conversionBufferSize) {
         if (m_conversionBuffer) {
@@ -1103,7 +1081,7 @@ void MediaWindow::updateCudaVideo(AVFrame *pFrame)
         m_conversionBufferSize = numBytes;
     }
 
-    // 分配或复用 pFrameRGBA 用于存储转换结果
+    // 复用 pFrameRGBA 用于存储转换结果
     if (!m_frameRGBA) {
         m_frameRGBA = av_frame_alloc();
         if (!m_frameRGBA) {

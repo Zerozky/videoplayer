@@ -32,7 +32,7 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx, const enum AVPixelF
         if (*p == AV_PIX_FMT_CUDA)
             return *p;
     }
-    qDebug() << "Failed to get HW surface format for NVDEC.";
+    qDebug() << "无法获取 NVDEC 的硬件像素格式";
     return pix_fmts[0];
 }
 #elif defined(Q_OS_MAC)
@@ -44,7 +44,7 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx, const enum AVPixelF
         if (*p == AV_PIX_FMT_VIDEOTOOLBOX)
             return *p;
     }
-    qDebug() << "Failed to get HW surface format for VideoToolbox.";
+    qDebug() << "无法获取 VideoToolbox 的硬件像素格式";
     return pix_fmts[0];
 }
 #endif
@@ -77,13 +77,13 @@ double DemuxWorker::getcurrentPlaybackTime()
 DemuxWorker::~DemuxWorker()
 {
 
-    qDebug() << "thread quit";
+    qDebug() << "线程退出";
 }
 
 void DemuxWorker::setFilePath(const QString &path)
 {
     filePath = path;
-    qDebug() << "File path set to:" << filePath;
+    qDebug() << "文件路径设置为:" << filePath;
 }
 
 void DemuxWorker::seekTo(double newTime)
@@ -107,7 +107,7 @@ void DemuxWorker::setVolume(double volume)
 void DemuxWorker::setExternalSubtitle(const QString &path)
 {
     qDebug() << "DemuxWorker 收到外挂字幕路径：" << path;
-    // TODO: 在这里保存 path 到成员变量，然后在解复用时打开第二个 AVFormatContext
+    // 保存 path 到成员变量，在解复用时打开第二个 AVFormatContext
     externalSubtitlePath = path;
     externalEvents.clear();
     externalEventIndex = 0;
@@ -156,17 +156,17 @@ void DemuxWorker::setPlaybackSpeed(double speed)
 {
     QMutexLocker locker(&seekMutex);
     playbackSpeed = speed;
-    qDebug() << "Playback speed set to" << playbackSpeed;
+    qDebug() << "播放速度设置为" << playbackSpeed;
 
     soundTouch.clear();
     soundTouch.setTempo(playbackSpeed);
 
-    // —— 1) Flush 解码器缓冲，丢掉所有未渲染帧 ——
+    // Flush 解码器缓冲，丢掉所有未渲染帧
     if (m_videoCodecContext) avcodec_flush_buffers(m_videoCodecContext);
     if (m_audioCodecContext) avcodec_flush_buffers(m_audioCodecContext);
     if (swrCtx) swr_init(swrCtx);
 
-    // —— 2) 更新音频输出采样率，让硬件直接加速播放 ——
+    // 更新音频输出采样率，让硬件直接加速播放
     if (m_audioSink) {
         m_audioSink->stop();
         delete m_audioSink;
@@ -189,7 +189,7 @@ void DemuxWorker::slotDoWork()
 {
     if (filePath.isEmpty())
     {
-        qDebug() << "No file selected";
+        qDebug() << "未选择文件";
         return;
     }
 
@@ -223,7 +223,7 @@ void DemuxWorker::slotDoWork()
         }
         if (avFormatContext) {
             avformat_close_input(&avFormatContext);
-            qDebug() << "end of play";
+            qDebug() << "结束播放";
         }
         if (packet) {
             av_packet_free(&packet);
@@ -250,7 +250,7 @@ void DemuxWorker::slotDoWork()
     pFrame = av_frame_alloc();
     if (!packet || !pFrame)
     {
-        qDebug() << "Failed to allocate packet or frame";
+        qDebug() << "无法分配数据包或帧";
         cleanup();
         return;
     }
@@ -271,7 +271,7 @@ void DemuxWorker::slotDoWork()
     // 2.根据URL打开本地文件或网络流
     if(avformat_open_input(&avFormatContext, fileName, nullptr, nullptr) != 0)
     {
-        qDebug() << "Couldn't open file";
+        qDebug() << "无法打开文件";
         cleanup();
         return;
     }
@@ -279,7 +279,7 @@ void DemuxWorker::slotDoWork()
     // 3.读取媒体的部分数据包以获取码流信息
     if(avformat_find_stream_info(avFormatContext, nullptr) < 0)
     {
-        qDebug() << "Couldn't find stream information";
+        qDebug() << "找不到流媒体信息";
         cleanup();
         return;
     }
@@ -301,7 +301,7 @@ void DemuxWorker::slotDoWork()
     }
     if(audioStream == -1 && videoStream == -1)
     {
-        qDebug() << "Didn't find a valid stream";
+        qDebug() << "未找到有效流";
         cleanup();
         return;
     }
@@ -311,19 +311,19 @@ void DemuxWorker::slotDoWork()
         AVCodecParameters *pSubtitleCodecPara = avFormatContext->streams[subtitleStream]->codecpar;
         pSubtitleCodecContext = avcodec_alloc_context3(nullptr);
         if (!pSubtitleCodecContext) {
-            qDebug() << "avcodec_alloc_context3 for subtitle failed";
+            qDebug() << "avcodec_alloc_context3 failed";
         } else if (avcodec_parameters_to_context(pSubtitleCodecContext, pSubtitleCodecPara) < 0) {
-            qDebug() << "avcodec_parameters_to_context for subtitle failed";
+            qDebug() << "字幕上下文的 avcodec parameters failed";
             avcodec_free_context(&pSubtitleCodecContext);
             pSubtitleCodecContext = nullptr;
         } else {
             const AVCodec *pCodecSubtitle = avcodec_find_decoder(pSubtitleCodecPara->codec_id);
             if (!pCodecSubtitle) {
-                qDebug() << "avcodec_find_decoder for subtitle failed";
+                qDebug() << "avcodec_find_decoder failed";
                 avcodec_free_context(&pSubtitleCodecContext);
                 pSubtitleCodecContext = nullptr;
             } else if (avcodec_open2(pSubtitleCodecContext, pCodecSubtitle, nullptr) < 0) {
-                qDebug() << "avcodec_open2 for subtitle failed";
+                qDebug() << "avcodec_open2 failed";
                 avcodec_free_context(&pSubtitleCodecContext);
                 pSubtitleCodecContext = nullptr;
             }
@@ -343,7 +343,7 @@ void DemuxWorker::slotDoWork()
         } else {
             videoFrameRate = av_q2d(vstream->r_frame_rate);
         }
-        qDebug() << "Detected videoFrameRate =" << videoFrameRate;
+        qDebug() << "检测到的视频帧率 =" << videoFrameRate;
 
         // 1.分配编解码器上下文
         pVideoCodecContext =  avcodec_alloc_context3(nullptr);
@@ -367,7 +367,7 @@ void DemuxWorker::slotDoWork()
             AVBufferRef *hw_device_ctx = nullptr;
             err = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_CUDA, nullptr, nullptr, 0);
             if (err < 0) {
-                qDebug() << "Failed to create CUDA device context for NVDEC, error:" << err;
+                qDebug() << "无法为 NVDEC 创建 CUDA 设备上下文，错误:" << err;
                 // 回退到纯软件解码
             } else {
                 pVideoCodecContext->hw_device_ctx = av_buffer_ref(hw_device_ctx);
@@ -380,7 +380,7 @@ void DemuxWorker::slotDoWork()
             AVBufferRef *hw_device_ctx = nullptr;
             err = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_VIDEOTOOLBOX, nullptr, nullptr, 0);
             if (err < 0) {
-                qDebug() << "Failed to create VideoToolbox device context, error:" << err;
+                qDebug() << "无法创建 VideoToolbox 设备上下文，错误:" << err;
                 // 回退到纯软件解码
             } else {
                 pVideoCodecContext->hw_device_ctx = av_buffer_ref(hw_device_ctx);
@@ -419,26 +419,26 @@ void DemuxWorker::slotDoWork()
 
         pAudioCodecContext = avcodec_alloc_context3(nullptr);
         if (!pAudioCodecContext) {
-            qDebug() << "avcodec_alloc_context3 for audio failed";
+            qDebug() << "音频的 avcodec_alloc_context3 failed";
             cleanup();
             return;
         }
 
         if (avcodec_parameters_to_context(pAudioCodecContext, pAudioCodecPara) < 0) {
-            qDebug() << "avcodec_parameters_to_context for audio failed";
+            qDebug() << "音频的 avcodec_parameters_to_context failed";
             cleanup();
             return;
         }
 
         const AVCodec *pCodecAudio = avcodec_find_decoder(pAudioCodecPara->codec_id);
         if (!pCodecAudio) {
-            qDebug() << "avcodec_find_decoder for audio failed";
+            qDebug() << "音频的 avcodec_find_decoder failed";
             cleanup();
             return;
         }
 
         if (avcodec_open2(pAudioCodecContext, pCodecAudio, nullptr) < 0) {
-            qDebug() << "avcodec_open2 for audio failed";
+            qDebug() << "音频的 avcodec_open2 failed";
             cleanup();
             return;
         }
@@ -458,7 +458,7 @@ void DemuxWorker::slotDoWork()
         m_audioSink->setBufferSize(buf);
         m_audioIO = m_audioSink->start();
 
-        // — Initialize SoundTouch —
+        // 初始化 soundtouch
         soundTouch.setSampleRate(originalSampleRate);
         soundTouch.setChannels(2);
         soundTouch.setTempo(playbackSpeed);  // start at 1.0×
@@ -466,7 +466,7 @@ void DemuxWorker::slotDoWork()
         // 初始化 SwrContext（音频重采样）
         swrCtx = swr_alloc();
         if (!swrCtx) {
-            qDebug() << "swr_alloc failed";
+            qDebug() << "初始化 SwrContext failed";
             cleanup();
             return;
         }
@@ -517,6 +517,7 @@ void DemuxWorker::slotDoWork()
     startTime = timer.elapsed();  // 初始播放时间
     soundTouch.clear();
 
+    // 播放主循环
     while(isPlay) {
         // 检查跳转请求
         {
@@ -526,7 +527,7 @@ void DemuxWorker::slotDoWork()
                 double targetTime = (pendingSeekTime >= 0) ? pendingSeekTime : (referenceTime + pendingSeekOffset);
                 int64_t timestamp = static_cast<int64_t>(targetTime * AV_TIME_BASE);
                 if(avformat_seek_file(avFormatContext, -1, INT64_MIN, timestamp, INT64_MAX, 0) < 0) {
-                    qDebug() << "Seek failed!";
+                    qDebug() << "跳转寻找失败";
                 } else {
                     if (pVideoCodecContext)
                         avcodec_flush_buffers(pVideoCodecContext);
@@ -534,15 +535,15 @@ void DemuxWorker::slotDoWork()
                         avcodec_flush_buffers(pAudioCodecContext);
                     if (pSubtitleCodecContext) {
                         avcodec_flush_buffers(pSubtitleCodecContext);
-                        qDebug() << "Subtitle decoder flushed after seek.";
+                        qDebug() << "跳转后刷新字幕解码器";
                     }
 
                     // 重置音频输出设备，丢弃所有已排队但未播放的 PCM 数据
                     if (m_audioSink) {
                         m_audioSink->reset();
-                        // 重新 start() 会返回新的 QIODevice，用于后续写数据
+                        // 重新 start() 返回新的 QIODevice，用于后续写数据
                         m_audioIO = m_audioSink->start();
-                        qDebug() << "Audio sink reset after seek.";
+                        qDebug() << "跳转后复位音频接收器.";
                     }
                     // 重置计时器，使 effectiveTime 立刻匹配 targetTime：
                     startTime = timer.elapsed() - static_cast<qint64>((targetTime / playbackSpeed) * 1000);
@@ -551,7 +552,7 @@ void DemuxWorker::slotDoWork()
                     lastSeekTimeSec = targetTime;
                     soundTouch.clear();
 
-                    // 在 seek 后重置外挂 ASS 事件索引
+                    // seek 后重置外挂 ASS 事件索引
                     qint64 nowMs = qint64(targetTime * 1000);
                     externalEventIndex = 0;
                     while (externalEventIndex < externalEvents.size()
@@ -606,7 +607,7 @@ void DemuxWorker::slotDoWork()
                     av_packet_unref(packet);
                     continue;
                 }
-                qDebug() << "发送视频帧失败!"<<  err;
+                qDebug() << "发送视频帧失败"<<  err;
             }
 
             // 5.2接收解码后的帧
@@ -625,18 +626,18 @@ void DemuxWorker::slotDoWork()
                 if (pFrame->format == hw_pix_fmt) {
                     sw_frame = av_frame_alloc();
                     if (!sw_frame) {
-                        qDebug() << "Failed to allocate sw_frame";
+                        qDebug() << "无法分配 sw_frame";
                         continue;
                     }
                     if (av_hwframe_transfer_data(sw_frame, pFrame, 0) < 0) {
-                        qDebug() << "Error transferring frame from GPU to CPU";
+                        qDebug() << "将帧从 GPU 传输到 CPU 时出现错误";
                         av_frame_free(&sw_frame);
                         continue;   // 跳过这帧，避免使用错误数据
                     }
                 } else {
                     sw_frame = av_frame_clone(pFrame);
                     if (!sw_frame) {
-                        qDebug() << "Failed to clone frame";
+                        qDebug() << "克隆 frame 失败";
                         continue;
                     }
                 }
@@ -678,7 +679,6 @@ void DemuxWorker::slotDoWork()
                 if (playbackSpeed > 1.1 && currentPts + threshold < effectiveTime) {
                     // 只有倍速播放时才丢帧
                     av_frame_free(&sw_frame);
-                    qDebug() << "丢帧";
                 } else {
                     emit sigGetFrame(sw_frame);
                 }
@@ -711,7 +711,7 @@ void DemuxWorker::slotDoWork()
                 // 进行音频重采样并写入音频设备
                 AVFrame *resampledFrame = av_frame_alloc();
                 if (!resampledFrame) {
-                    qDebug() << "Failed to allocate resampledFrame";
+                    qDebug() << "无法分配 resampledFrame";
                     continue;
                 }
 
@@ -725,19 +725,7 @@ void DemuxWorker::slotDoWork()
                     continue;
                 }
 
-                // 计算音频数据大小
-                int dataSize = av_samples_get_buffer_size(
-                    nullptr,
-                    2,
-                    resampledFrame->nb_samples,
-                    AV_SAMPLE_FMT_S16,
-                    1);
-
-                // // 将数据写入 QAudioSink
-                // if (m_audioIO) {
-                //     m_audioIO->write((const char *)resampledFrame->data[0], dataSize);
-                // }
-
+                // soundtouch 更改声音倍速
                 const SAMPLETYPE* inBuf = reinterpret_cast<const SAMPLETYPE*>(resampledFrame->data[0]);
                 int nbSamples = resampledFrame->nb_samples;
                 soundTouch.putSamples(inBuf, nbSamples);
@@ -747,7 +735,7 @@ void DemuxWorker::slotDoWork()
                 do {
                     received = soundTouch.receiveSamples(outBuf.data(), resampledFrame->nb_samples);
                     if (received > 0) {
-                        // received = number of samples per channel
+                        // 接收的数据为每个通道的样本数
                         int bytes = received * sizeof(SAMPLETYPE) * 2;
                         m_audioIO->write(reinterpret_cast<const char*>(outBuf.data()), bytes);
                     }
@@ -764,43 +752,42 @@ void DemuxWorker::slotDoWork()
             int gotSubtitle = 0;
             err = avcodec_decode_subtitle2(pSubtitleCodecContext, &subtitle, &gotSubtitle, packet);
             if (err < 0) {
-                qDebug() << "Decoding subtitle failed:" << err;
+                qDebug() << "字幕解码失败:" << err;
             } else if (gotSubtitle) {
                 // 遍历每个 rect
                 for (int i = 0; i < subtitle.num_rects; i++) {
                     AVSubtitleRect *rect = subtitle.rects[i];
-                    // 如果是图像字幕（例如 PGS）
+                    // 如果是图像字幕（PGS）
                     if (rect->type == SUBTITLE_BITMAP) {
                         int w = rect->w, h = rect->h;
                         // 判断尺寸、索引图和调色板是否有效，同时检查调色板颜色数量
                         if (w <= 0 || h <= 0 || !rect->data[0] || rect->nb_colors <= 0 || !rect->data[1]) {
                             continue;
                         }
-                        // 创建一个 QImage 格式为 ARGB32
+                        // 创建一个 QImage，格式为 ARGB32
                         QImage img(w, h, QImage::Format_ARGB32);
-                        // 将调色板指针转换为 uint32_t*，因为每个颜色占 4 字节
+                        // 每个颜色占 4 字节，将调色板指针转换为 uint32_t*
                         uint32_t *palette = reinterpret_cast<uint32_t*>(rect->data[1]);
-                        // 对于每个像素，根据索引图获取索引值，然后查找对应颜色
+                        // 每个像素根据索引图获取索引值，查找对应颜色
                         for (int y = 0; y < h; y++) {
                             for (int x = 0; x < w; x++) {
-                                // 这里假设 rect->linesize[0] 存在且有效
                                 int index = rect->data[0][y * rect->linesize[0] + x];
-                                // 检查 index 是否在调色板范围内
+                                // 检查是否在调色板范围内
                                 if (index < 0 || index >= rect->nb_colors) {
                                     continue;
                                 }
-                                // 注意：rect->colors 中的颜色通常存储为 ARGB 值
+                                // rect->colors 中的颜色通常为 ARGB 值
                                 uint32_t color = palette[index];
                                 img.setPixel(x, y, color);
                             }
                         }
-                        // 取 PGS 帧里给的显示时长（ms）
+                        // 取 PGS 帧里的字幕显示时长（ms）
                         int duration = static_cast<int>(subtitle.end_display_time - subtitle.start_display_time);
                         duration = qMax(duration, 5000);
                         // 发射图像字幕信号
                         emit sigSubtitleImage(img, duration);
                     }
-                    // 如果是 ASS 字幕（或普通文本字幕）
+                    // ASS 字幕、普通文本字幕
                     else if (rect->type == SUBTITLE_ASS) {
                         if (rect->ass) {
                             QString assText = QString::fromUtf8(rect->ass);
@@ -817,7 +804,7 @@ void DemuxWorker::slotDoWork()
                         }
                     }
                     else {
-                        qDebug() << "Unknown subtitle rect type:" << rect->type;
+                        qDebug() << "未知的字幕类型:" << rect->type;
                     }
                 }
                 avsubtitle_free(&subtitle);

@@ -28,13 +28,13 @@ protected:
 
 private:
 #ifdef Q_OS_WIN
-    GLuint m_texture;                    // OpenGL 纹理 ID
-    cudaGraphicsResource *m_cudaResource; // CUDA 注册的资源
-    cudaStream_t m_stream = nullptr;
+    GLuint m_texture;   // OpenGL 2D 纹理ID，在 GPU 上存储视频帧
+    cudaGraphicsResource *m_cudaResource;   // CUDA 注册的资源，实现 CUDA OpenGL 互操作
+    cudaStream_t m_stream = nullptr;    // CUDA 异步流
 #endif
-    QMutex m_mutex;   // 用于线程同步
-    int m_frameWidth; // 当前帧宽度
-    int m_frameHeight;// 当前帧高度
+    QMutex m_mutex; // 用于线程同步
+    int m_frameWidth;   // 当前帧宽度
+    int m_frameHeight;  // 当前帧高度
 };
 
 

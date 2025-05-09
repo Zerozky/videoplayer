@@ -8,7 +8,7 @@ TitleBar::TitleBar(QWidget *parent)
 {
     setFixedHeight(24);
 
-    // 水平布局 关闭/最小化/最大化
+    // 水平布局 关闭 最小化 最大化
     auto *hbox = new QHBoxLayout(this);
     hbox->setContentsMargins(0, 0, 0, 0);
     hbox->setSpacing(0);
@@ -20,7 +20,7 @@ TitleBar::TitleBar(QWidget *parent)
     auto *minBtn = new QPushButton(QIcon(":/icons/yellow"), "", this);
     minBtn->setObjectName("minimizeButton");
     hbox->addWidget(minBtn);
-    // 最大化/还原
+    // 最大化 还原
     auto *maxBtn = new QPushButton(QIcon(":/icons/max"), "", this);
     maxBtn->setObjectName("maximizeButton");
     hbox->addWidget(maxBtn);

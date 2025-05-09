@@ -14,7 +14,7 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
     // 整体布局
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-    // — 第一行：快退1分、快退5秒、快进5秒、快进1分
+    // 第一行：快进快退按钮
     QHBoxLayout *row1 = new QHBoxLayout;
     QPushButton *rew1m = new QPushButton(tr("<< 1m"), this);
     QPushButton *rew5s = new QPushButton(tr("<< 5s"), this);
@@ -26,13 +26,12 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
     row1->addWidget(fwd1m);
     mainLayout->addLayout(row1);
 
-    // 连接信号
     connect(rew1m, &QPushButton::clicked, this, [=]{ emit seekRelative(-60.0); });
     connect(rew5s, &QPushButton::clicked, this, [=]{ emit seekRelative(-5.0); });
     connect(fwd5s, &QPushButton::clicked, this, [=]{ emit seekRelative( 5.0); });
     connect(fwd1m, &QPushButton::clicked, this, [=]{ emit seekRelative( 60.0); });
 
-    // — 第二行：倍速按钮 + 当前倍速显示
+    // 第二行：倍速按钮 当前倍速显示
     QHBoxLayout *row2 = new QHBoxLayout;
     QPushButton *btn05x = new QPushButton(tr("0.5×"), this);
     QPushButton *btn1x = new QPushButton(tr("1×"), this);
@@ -55,7 +54,7 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
     connect(btn15x, &QPushButton::clicked, this, [=]{ emit setPlaybackSpeed(1.5);  updateSpeedLabel(1.5);  });
     connect(btn3x,  &QPushButton::clicked, this, [=]{ emit setPlaybackSpeed(3.0);  updateSpeedLabel(3.0);  });
 
-    // — 第三行：ASS 字幕字体、字号
+    // 第三行：ASS 字幕字体、字号
     QHBoxLayout *row3 = new QHBoxLayout;
     QFontComboBox *fontBox = new QFontComboBox(this);
     QSpinBox      *sizeBox = new QSpinBox(this);
@@ -71,8 +70,6 @@ ControlPanelDialog::ControlPanelDialog(QWidget *parent)
             this, &ControlPanelDialog::subtitleFontChanged);
     connect(sizeBox, &QSpinBox::valueChanged,
             this, &ControlPanelDialog::subtitleFontSizeChanged);
-
-
 
     // 第四行：程序语言选择
     QHBoxLayout *row4 = new QHBoxLayout;

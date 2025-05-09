@@ -23,14 +23,17 @@ CudaVideoWindow::~CudaVideoWindow()
     makeCurrent();
 #ifdef Q_OS_WIN
     if (m_cudaResource) {
+        // 注销 CUDA 资源
         cudaGraphicsUnregisterResource(m_cudaResource);
         m_cudaResource = nullptr;
     }
     if (m_texture) {
+        // 删除 OpenGL 纹理
         glDeleteTextures(1, &m_texture);
         m_texture = 0;
     }
     if(m_stream) {
+        // 销毁 CUDA 流
         cudaStreamDestroy(m_stream);
         m_stream = nullptr;
     }
@@ -41,14 +44,16 @@ CudaVideoWindow::~CudaVideoWindow()
 void CudaVideoWindow::initializeGL()
 {
     initializeOpenGLFunctions();
+    // 默认黑色
     glClearColor(0, 0, 0, 1);
 #ifdef Q_OS_WIN
     // 创建 OpenGL 纹理
     glGenTextures(1, &m_texture);
     glBindTexture(GL_TEXTURE_2D, m_texture);
+    // 设置线性过滤
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // 分配一个 1x1 纹理
+    // 分配一个 1x1 RGBA8 纹理
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -58,15 +63,15 @@ void CudaVideoWindow::initializeGL()
     // 创建 CUDA 流
     cudaError_t err = cudaStreamCreate(&m_stream);
     if (err != cudaSuccess) {
-        qDebug() << "cudaStreamCreate failed:" << cudaGetErrorString(err);
+        qDebug() << "CUDA 流创建失败:" << cudaGetErrorString(err);
     }
 
     // 注册该纹理到 CUDA
     err = cudaGraphicsGLRegisterImage(&m_cudaResource, m_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
     if (err != cudaSuccess) {
-        qDebug() << "cudaGraphicsGLRegisterImage failed:" << cudaGetErrorString(err);
+        qDebug() << "CUDA 纹理注册失败:" << cudaGetErrorString(err);
     } else {
-        qDebug() << "CUDA resource registered successfully.";
+        qDebug() << "CUDA 资源注册成功";
     }
 #endif
 }
@@ -82,7 +87,7 @@ void CudaVideoWindow::paintGL()
     float windowAspect = static_cast<float>(width()) / height();
     float videoAspect = (m_frameHeight > 0) ? static_cast<float>(m_frameWidth) / m_frameHeight : 1.0f;
 
-    // 默认全屏时，四边形覆盖 [-1, 1] 区域，即宽高均为2
+    // 默认全屏时，四边形覆盖 [-1, 1]x[-1, 1] 区域，即宽高均为2
     float quadWidth = 2.0f;
     float quadHeight = 2.0f;
     // 根据窗口和视频的宽高比，调整四边形尺寸，确保视频按原比例显示
@@ -96,11 +101,12 @@ void CudaVideoWindow::paintGL()
     float halfW = quadWidth / 2.0f;
     float halfH = quadHeight / 2.0f;
 
+    // 将纹理映射到屏幕坐标 [-halfW, +halfW]×[-halfH, +halfH] 区域
     glBegin(GL_QUADS);
-    glTexCoord2f(0.0f, 1.0f); glVertex2f(-halfW, -halfH);
-    glTexCoord2f(1.0f, 1.0f); glVertex2f( halfW, -halfH);
-    glTexCoord2f(1.0f, 0.0f); glVertex2f( halfW,  halfH);
-    glTexCoord2f(0.0f, 0.0f); glVertex2f(-halfW,  halfH);
+    glTexCoord2f(0.0f, 1.0f); glVertex2f(-halfW, -halfH);   // 左下
+    glTexCoord2f(1.0f, 1.0f); glVertex2f( halfW, -halfH);   // 右下
+    glTexCoord2f(1.0f, 0.0f); glVertex2f( halfW,  halfH);   // 右上
+    glTexCoord2f(0.0f, 0.0f); glVertex2f(-halfW,  halfH);   // 左上
     glEnd();
 
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -136,13 +142,13 @@ void CudaVideoWindow::updateFrame(const uint8_t *data, int width, int height)
         // 重新注册该纹理到 CUDA
         cudaError_t err = cudaGraphicsGLRegisterImage(&m_cudaResource, m_texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
         if (err != cudaSuccess) {
-            qDebug() << "Re-registration of CUDA resource failed:" << cudaGetErrorString(err);
+            qDebug() << "CUDA 资源重新注册失败:" << cudaGetErrorString(err);
             doneCurrent();
             return;
         }
     }
     if (!m_cudaResource) {
-        qDebug() << "m_cudaResource is invalid (null)";
+        qDebug() << "m_cudaResource null";
         doneCurrent();
         return;
     }
@@ -150,29 +156,35 @@ void CudaVideoWindow::updateFrame(const uint8_t *data, int width, int height)
     // 映射 CUDA 资源
     cudaError_t err = cudaGraphicsMapResources(1, &m_cudaResource, 0);
     if (err != cudaSuccess) {
-        qDebug() << "cudaGraphicsMapResources failed:" << cudaGetErrorString(err);
+        qDebug() << "映射 CUDA 资源失败:" << cudaGetErrorString(err);
         doneCurrent();
         return;
     }
 
+    // 获取底层 cudaArray_t
     cudaArray_t array;
     err = cudaGraphicsSubResourceGetMappedArray(&array, m_cudaResource, 0, 0);
     if (err != cudaSuccess) {
-        qDebug() << "cudaGraphicsSubResourceGetMappedArray failed:" << cudaGetErrorString(err);
+        qDebug() << "获取底层 cudaArray 失败:" << cudaGetErrorString(err);
         cudaGraphicsUnmapResources(1, &m_cudaResource, 0);
         doneCurrent();
         return;
     }
+
+    // 通过流将 CPU 上的数据拷贝到 GPU
     size_t pitch = m_frameWidth * 4; // 每像素4字节（RGBA）
     err = cudaMemcpy2DToArrayAsync(array, 0, 0,
                                    data, pitch, pitch, m_frameHeight,
                                    cudaMemcpyHostToDevice, m_stream);
     if (err != cudaSuccess) {
-        qDebug() << "cudaMemcpy2DAsync failed:" << cudaGetErrorString(err);
+        qDebug() << "数据拷贝失败:" << cudaGetErrorString(err);
     }
+    // 等待拷贝完成
     cudaStreamSynchronize(m_stream);
+    // 解除映射
     cudaGraphicsUnmapResources(1, &m_cudaResource, 0);
-    update(); // 触发重绘
+    // 触发重绘
+    update();
     doneCurrent();
 #endif
 }
